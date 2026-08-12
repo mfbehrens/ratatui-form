@@ -15,7 +15,11 @@ pub struct FormExtractError {
 
 impl FormExtractError {
     /// Creates a new extraction error.
-    pub fn new(field_index: usize, field_name: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn new(
+        field_index: usize,
+        field_name: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             field_index,
             field_name: field_name.into(),
@@ -29,7 +33,11 @@ impl std::fmt::Display for FormExtractError {
         if self.field_name.is_empty() {
             write!(f, "field {}: {}", self.field_index, self.message)
         } else {
-            write!(f, "field {} ({}): {}", self.field_index, self.field_name, self.message)
+            write!(
+                f,
+                "field {} ({}): {}",
+                self.field_index, self.field_name, self.message
+            )
         }
     }
 }
@@ -41,7 +49,7 @@ impl std::error::Error for FormExtractError {}
 /// This trait is implemented by the `#[derive(FormModel)]` macro. The derive
 /// generates a submodule containing a custom `Fields` struct that holds
 /// typed form input controls, and implements `FormModel` and `TryFrom<Form<Fields>>`.
-pub trait FormModel: Sized {
+pub trait TypedForm: Sized {
     /// The strongly-typed fields container for this model.
     type Fields: FormFields;
 
@@ -50,9 +58,9 @@ pub trait FormModel: Sized {
 }
 
 /// Helper type alias for a Form for model `T`.
-pub type FormFor<T> = Form<<T as FormModel>::Fields>;
+pub type FormFor<T> = Form<<T as TypedForm>::Fields>;
 
-impl<T: FormModel> From<T> for Form<T::Fields> {
+impl<T: TypedForm> From<T> for Form<T::Fields> {
     fn from(model: T) -> Self {
         model.get_form()
     }

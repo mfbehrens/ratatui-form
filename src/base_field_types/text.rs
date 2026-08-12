@@ -159,14 +159,6 @@ impl TextInput {
 }
 
 impl BasicFieldType for TextInput {
-    fn value_str(&self) -> String {
-        self.value.clone()
-    }
-
-    fn value_bool(&self) -> Option<bool> {
-        None
-    }
-
     fn render(&self, area: Rect, buf: &mut Buffer, focused: bool, style: &FormStyle) {
         if area.height < 1 || area.width < 1 {
             return;

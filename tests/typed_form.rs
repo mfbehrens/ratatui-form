@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_form::{
-    FieldAttributes, FieldType, Form, FormFields, FormFor, FormModel, FormResult, TextInput,
+    FieldAttributes, FieldType, Form, FormFields, FormFor, FormResult, TextInput, TypedForm,
 };
 
 #[derive(RatatuiTypedForm, Debug, PartialEq)]

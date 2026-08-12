@@ -1,8 +1,8 @@
 //! Derive macro for `ratatui-form`.
 //!
-//! `#[derive(FormModel)]` turns a struct into a form model: it generates a
+//! `#[derive(TypedForm)]` turns a struct into a form model: it generates a
 //! submodule containing a `Fields` struct that holds typed form input controls,
-//! implements `FormFields`, `FormModel`, and `TryFrom<Form<Fields>>` to convert
+//! implements `FormFields`, `TypedForm`, and `TryFrom<Form<Fields>>` to convert
 //! the edited form back into the struct.
 
 use proc_macro::TokenStream;
@@ -25,7 +25,7 @@ fn crate_path() -> TokenStream2 {
     }
 }
 
-/// Derives `FormModel` for a struct.
+/// Derives `TypedForm` for a struct.
 #[proc_macro_derive(TypedForm, attributes(form))]
 pub fn derive_form_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -39,7 +39,7 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
     if !input.generics.params.is_empty() {
         return Err(syn::Error::new_spanned(
             &input.generics,
-            "FormModel does not support generic structs",
+            "TypedForm does not support generic structs",
         ));
     }
 
@@ -49,14 +49,14 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
             _ => {
                 return Err(syn::Error::new_spanned(
                     input,
-                    "FormModel only supports structs with named fields",
+                    "TypedForm only supports structs with named fields",
                 ))
             }
         },
         Data::Enum(_) | Data::Union(_) => {
             return Err(syn::Error::new_spanned(
                 input,
-                "FormModel only supports structs",
+                "TypedForm only supports structs",
             ))
         }
     };
@@ -143,7 +143,7 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
 
     let form_model_impl = quote! {
-        impl #krate::FormModel for #ident {
+        impl #krate::TypedForm for #ident {
             type Fields = #mod_ident::Fields;
 
             fn get_form(&self) -> #krate::Form<Self::Fields> {

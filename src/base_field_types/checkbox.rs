@@ -55,18 +55,6 @@ impl Checkbox {
 }
 
 impl BasicFieldType for Checkbox {
-    fn value_str(&self) -> String {
-        if self.checked {
-            "true".to_string()
-        } else {
-            "false".to_string()
-        }
-    }
-
-    fn value_bool(&self) -> Option<bool> {
-        Some(self.checked)
-    }
-
     fn render(&self, area: Rect, buf: &mut Buffer, focused: bool, style: &FormStyle) {
         if area.height < 1 || area.width < 4 {
             return;

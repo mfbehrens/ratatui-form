@@ -51,16 +51,14 @@ pub mod base_field_types;
 pub mod field_types;
 pub mod form;
 pub mod model;
-pub mod style;
-pub mod validation;
-
 mod navigation;
+mod style;
+pub mod validation;
 
 pub use base_field_types::{BasicFieldType, Checkbox, Select, TextInput};
 pub use field_types::{FieldAttributes, FieldType};
 pub use form::FormResult;
-pub use model::{Form, FormExtractError, FormFields, FormFor, FormModel};
+pub use model::{Form, FormExtractError, FormFields, FormFor, TypedForm};
 pub use ratatui_form_derive::TypedForm;
 pub use style::FormStyle;
-// pub use validation::rules::{Email, Ipv4, Ipv6, MaxLength, MinLength, Numeric, Pattern, Required};
 pub use validation::{ValidationError, Validator};

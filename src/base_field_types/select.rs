@@ -93,17 +93,6 @@ impl Select {
 }
 
 impl BasicFieldType for Select {
-    fn value_str(&self) -> String {
-        self.selected_index
-            .and_then(|i| self.options.get(i))
-            .map(|(v, _)| v.clone())
-            .unwrap_or_default()
-    }
-
-    fn value_bool(&self) -> Option<bool> {
-        None
-    }
-
     fn render(&self, area: Rect, buf: &mut Buffer, focused: bool, style: &FormStyle) {
         if area.height < 1 || area.width < 1 {
             return;

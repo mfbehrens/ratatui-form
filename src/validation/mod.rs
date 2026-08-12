@@ -1,7 +1,5 @@
 //! Validation traits and types.
 
-pub mod rules;
-
 /// A validation error for a specific field.
 #[derive(Debug, Clone)]
 pub struct ValidationError {
@@ -26,3 +24,7 @@ impl Validator for fn(&str) -> bool {
         }
     }
 }
+
+pub mod ip;
+pub mod numeric;
+pub mod text;
