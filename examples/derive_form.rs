@@ -27,7 +27,7 @@ struct Signup {
     #[form(label = "Age")]
     age: u8,
 
-    #[form(label = "Ip address")]
+    #[form(label = "IP address")]
     ip: Ipv6Addr,
 
     #[form(label = "Company")]

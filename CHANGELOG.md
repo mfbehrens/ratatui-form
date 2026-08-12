@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so completely custom field types can be added by implementing `FormValue`.
   Built-in implementations cover `String`, `Option<String>`, `bool`,
   `std::net::Ipv4Addr`, `std::net::Ipv6Addr`, and all numeric types.
+- Auto-generated labels now uppercase short initialisms in field names
+  (`ip` → `IP`, `api_key` → `API KEY`).
+- README rewritten to document the derive-based API and custom field types.
 
 ## [0.1.1] - 2025-01-31
 

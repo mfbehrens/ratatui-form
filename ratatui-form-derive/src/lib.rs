@@ -285,18 +285,64 @@ fn validator_expr(expr: &Expr) -> syn::Result<TokenStream2> {
 }
 
 fn humanize(name: &str) -> String {
-    let mut out = String::new();
-    let mut capitalize = true;
-    for c in name.chars() {
-        if c == '_' {
-            out.push(' ');
-            capitalize = true;
-        } else if capitalize {
-            out.extend(c.to_uppercase());
-            capitalize = false;
-        } else {
-            out.push(c);
+    name.split('_')
+        .filter(|word| !word.is_empty())
+        .map(humanize_word)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Formats a single snake_case word.
+///
+/// Short all-lowercase words are treated as initialisms and uppercased
+/// (`ip` → `IP`, `id` → `ID`), everything else is capitalized normally
+/// (`name` → `Name`, `ipv6` → `Ipv6`).
+fn humanize_word(word: &str) -> String {
+    let is_initialism = word.len() <= 3 && word.chars().all(|c| c.is_ascii_lowercase());
+    if is_initialism {
+        word.to_ascii_uppercase()
+    } else {
+        let mut chars = word.chars();
+        match chars.next() {
+            None => String::new(),
+            Some(first) => first.to_uppercase().chain(chars).collect(),
         }
     }
-    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::humanize;
+
+    #[test]
+    fn separates_snake_case_words() {
+        assert_eq!(humanize("full_name"), "Full Name");
+    }
+
+    #[test]
+    fn capitalizes_single_words() {
+        assert_eq!(humanize("name"), "Name");
+        assert_eq!(humanize("email"), "Email");
+    }
+
+    #[test]
+    fn uppercases_short_initialisms() {
+        assert_eq!(humanize("ip"), "IP");
+        assert_eq!(humanize("id"), "ID");
+        assert_eq!(humanize("ip_address"), "IP Address");
+        assert_eq!(humanize("api_key"), "API KEY");
+    }
+
+    #[test]
+    fn leaves_longer_words_alone() {
+        assert_eq!(humanize("ipv6"), "Ipv6");
+        assert_eq!(humanize("user"), "User");
+    }
+
+    #[test]
+    fn handles_empty_and_underscores() {
+        assert_eq!(humanize(""), "");
+        assert_eq!(humanize("_"), "");
+        assert_eq!(humanize("a_b_c"), "A B C");
+    }
 }

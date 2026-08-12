@@ -4,21 +4,26 @@
 [![docs.rs](https://docs.rs/ratatui-form/badge.svg)](https://docs.rs/ratatui-form)
 [![CI](https://github.com/DavidLiedle/ratatui-form/actions/workflows/ci.yml/badge.svg)](https://github.com/DavidLiedle/ratatui-form/actions/workflows/ci.yml)
 
-A Rust TUI form builder crate built on [Ratatui](https://github.com/ratatui/ratatui). Create terminal forms with a fluent builder API, pre-built field types, and composite blocks for common patterns like addresses and contact info.
+Typed TUI forms built on [Ratatui](https://github.com/ratatui/ratatui). Define
+a struct, derive `FormModel`, and get an interactive form whose edited values
+convert back into the struct — no manual field wiring.
 
 ![demo](demo.gif)
 
-> **Note:** This crate was originally developed under the name `tform`, but was renamed to `ratatui-form` to avoid confusion with the unrelated [tform](https://crates.io/crates/tform) crate. If you were using the old name, please update your dependencies to `ratatui-form`.
+> **Note:** This crate was originally developed under the name `tform`, but was
+> renamed to `ratatui-form` to avoid confusion with the unrelated
+> [tform](https://crates.io/crates/tform) crate. If you were using the old
+> name, please update your dependencies to `ratatui-form`.
 
 ## Features
 
-- **Fluent Builder API** - Chain methods to build forms quickly
+- **Typed forms** - `#[derive(FormModel)]` maps a struct to a form and back
 - **Pre-built Fields** - TextInput, Select (dropdown), Checkbox
-- **Composite Blocks** - AddressBlock, ContactBlock, DateRangeBlock
-- **Validation** - Required, Email, MinLength, MaxLength, Pattern (regex)
-- **Keyboard Navigation** - Tab, Shift+Tab, Arrow keys
+- **Custom field types** - any type becomes a field via the `FormValue` trait
+- **Validation** - Required, Email, MinLength, MaxLength, Pattern, Numeric, or
+  any `fn(&str) -> bool` / custom `Validator`
+- **Keyboard Navigation** - Tab, Shift+Tab, Arrow keys, Esc
 - **Theming** - Customizable styles with dark/light presets
-- **JSON Export** - Serialize form data to JSON files
 
 ## Installation
 
@@ -32,164 +37,112 @@ ratatui-form = "0.1.1"
 ## Quick Start
 
 ```rust
-use std::io;
-use crossterm::event::{self, Event};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
-use crossterm::execute;
-use ratatui::{backend::CrosstermBackend, Terminal};
-use ratatui_form::{Form, FormResult, AddressBlock, Email};
+use ratatui_form::{Form, FormModel};
 
-fn main() -> io::Result<()> {
-    // Setup terminal
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+#[derive(FormModel)]
+#[form(title = "Sign Up")]
+struct Signup {
+    #[form(label = "Full Name", required, placeholder = "Ada Lovelace")]
+    name: String,
 
-    // Build the form
-    let mut form = Form::builder()
-        .title("Shipping Information")
-        .text("name", "Full Name")
-            .placeholder("John Doe")
-            .required()
-            .done()
-        .text("email", "Email")
-            .placeholder("john@example.com")
-            .required()
-            .validator(Box::new(Email))
-            .done()
-        .block(AddressBlock::new("shipping").required())
-        .checkbox("newsletter", "Subscribe to newsletter")
-            .done()
-        .build();
+    #[form(label = "Email", required, validate = is_valid_email)]
+    email: String,
 
-    // Event loop
-    loop {
-        terminal.draw(|frame| {
-            form.render(frame.area(), frame.buffer_mut());
-        })?;
+    #[form(label = "Age")]
+    age: u8,
 
-        if let Event::Key(key) = event::read()? {
-            form.handle_input(key);
+    #[form(label = "Subscribe")]
+    newsletter: bool,
 
-            match form.result() {
-                FormResult::Submitted => {
-                    form.write_json("output.json")?;
-                    break;
-                }
-                FormResult::Cancelled => break,
-                FormResult::Active => {}
-            }
+    #[form(skip)]
+    id: u64,
+}
+
+// Validator functions are plain `fn(&str) -> bool`.
+fn is_valid_email(value: &str) -> bool {
+    value.contains('@') && value.contains('.')
+}
+
+// Build a form seeded with the model's current values...
+let model = Signup {
+    name: "Ada".into(),
+    email: "ada@example.com".into(),
+    age: 37,
+    newsletter: true,
+    id: 42,
+};
+let mut form = Form::<Signup>::from(model);
+
+// ...and read the edited values back into the struct.
+let edited: Signup = Signup::try_from(form)?;
+```
+
+Each struct field becomes a form field, addressed by its position in the
+struct (skipped fields are excluded). `String` fields render as text inputs,
+`bool` as checkboxes, and numeric / IP-address types as validated text inputs.
+
+## Field Attributes
+
+- `#[form(label = "…")]` — display label (defaults to the humanized field name)
+- `#[form(placeholder = "…")]` — text input placeholder
+- `#[form(required)]` — the field must have a value to submit
+- `#[form(validate = path)]` — a `fn(&str) -> bool` validator (repeatable)
+- `#[form(skip)]` — exclude the field from the form; restored via `Default`
+
+Struct attribute:
+
+- `#[form(title = "…")]` — the form title (defaults to the struct name)
+
+## Custom Field Types
+
+The derive maps every field through the `FormValue` trait instead of
+hardcoding a type→field mapping, so any type can be used in a form by
+implementing `FormValue`. The library ships implementations for `String`,
+`Option<String>`, `bool`, `std::net::Ipv4Addr`, `std::net::Ipv6Addr`, and the
+numeric types (`u8`..`u64`, `i8`..`i64`, `f32`, `f64`, and their size
+variants).
+
+```rust
+use ratatui_form::{Field, FieldSpec, Form, FormExtractError, FormModel, FormValue, TextInput};
+
+#[derive(Clone, Debug, PartialEq)]
+struct Port(u16);
+
+impl FormValue for Port {
+    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+        let mut input = TextInput::new(spec.label);
+        if spec.required {
+            input = input.required();
         }
+        Box::new(input.initial_value(value.0.to_string()))
     }
 
-    // Cleanup
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
+        let raw = form.value_str(index).ok_or_else(|| FormExtractError {
+            field_index: index,
+            message: "field not found in form".to_string(),
+        })?;
+        let port = raw.parse::<u16>().map_err(|_| FormExtractError {
+            field_index: index,
+            message: "expected a port number (0-65535)".to_string(),
+        })?;
+        Ok(Port(port))
+    }
+}
 
-    Ok(())
+#[derive(Debug, FormModel)]
+struct ServerConfig {
+    #[form(label = "Port", required)]
+    port: Port,
 }
 ```
-
-## Field Types
-
-### TextInput
-
-Single-line text input with cursor support.
-
-```rust
-Form::builder()
-    .text("username", "Username")
-        .placeholder("Enter username")
-        .required()
-        .initial_value("default")
-        .validator(Box::new(MinLength(3)))
-        .done()
-    .build()
-```
-
-### Select
-
-Dropdown selection with keyboard navigation.
-
-```rust
-Form::builder()
-    .select("priority", "Priority")
-        .option("low", "Low")
-        .option("medium", "Medium")
-        .option("high", "High")
-        .required()
-        .initial_value("medium")
-        .done()
-    .build()
-```
-
-### Checkbox
-
-Toggle checkbox for boolean values.
-
-```rust
-Form::builder()
-    .checkbox("terms", "I agree to the terms")
-        .required()  // Must be checked
-        .checked(false)
-        .done()
-    .build()
-```
-
-## Composite Blocks
-
-Blocks are pre-configured groups of related fields.
-
-### AddressBlock
-
-US address with street, city, state (dropdown), and ZIP code validation.
-
-```rust
-use ratatui_form::AddressBlock;
-
-Form::builder()
-    .block(AddressBlock::new("shipping").required())
-    .build()
-```
-
-Creates fields: `shipping_street1`, `shipping_street2`, `shipping_city`, `shipping_state`, `shipping_zip`
-
-### ContactBlock
-
-Contact information with email validation.
-
-```rust
-use ratatui_form::ContactBlock;
-
-Form::builder()
-    .block(ContactBlock::new("contact").required())
-    .build()
-```
-
-Creates fields: `contact_name`, `contact_email`, `contact_phone`
-
-### DateRangeBlock
-
-Start and end date fields with YYYY-MM-DD format validation.
-
-```rust
-use ratatui_form::DateRangeBlock;
-
-Form::builder()
-    .block(DateRangeBlock::new("trip").required())
-    .build()
-```
-
-Creates fields: `trip_start`, `trip_end`
 
 ## Validation
 
 ### Built-in Validators
 
 ```rust
-use ratatui_form::{Required, Email, MinLength, MaxLength, Pattern};
+use ratatui_form::{Required, Email, MinLength, MaxLength, Pattern, Numeric};
 
 // Required - field cannot be empty
 .validator(Box::new(Required))
@@ -202,6 +155,9 @@ use ratatui_form::{Required, Email, MinLength, MaxLength, Pattern};
 
 // MaxLength - maximum character count
 .validator(Box::new(MaxLength(100)))
+
+// Numeric - field must parse as a number
+.validator(Box::new(Numeric))
 
 // Pattern - custom regex
 .validator(Box::new(Pattern::new(r"^\d{3}-\d{4}$", "Invalid format")))
@@ -261,14 +217,10 @@ instead.
 use ratatui_form::FormStyle;
 
 // Dark theme (default)
-Form::builder()
-    .style(FormStyle::dark())
-    .build()
+FormStyle::dark()
 
 // Light theme
-Form::builder()
-    .style(FormStyle::light())
-    .build()
+FormStyle::light()
 ```
 
 ### Custom Styles
@@ -287,45 +239,14 @@ let custom_style = FormStyle::new()
     .button(Style::default().fg(Color::White).bg(Color::DarkGray))
     .button_focused(Style::default().fg(Color::Black).bg(Color::Green));
 
-Form::builder()
-    .style(custom_style)
-    .build()
+let form = model.get_form().with_style(custom_style);
 ```
 
-## JSON Output
-
-Forms serialize to flat JSON with field IDs as keys:
-
-```rust
-// After form.write_json("output.json")
-```
-
-```json
-{
-  "name": "John Doe",
-  "email": "john@example.com",
-  "shipping_street1": "123 Main St",
-  "shipping_street2": "",
-  "shipping_city": "Springfield",
-  "shipping_state": "IL",
-  "shipping_zip": "62701",
-  "newsletter": true
-}
-```
-
-Access form data programmatically:
-
-```rust
-let data = form.to_json();
-println!("{}", serde_json::to_string_pretty(&data)?);
-```
-
-## Example
-
-Run the included example:
+## Examples
 
 ```bash
-cargo run --example address_form
+cargo run --example derive_form   # typed form from a struct
+cargo run --example custom_field  # completely custom field types via FormValue
 ```
 
 ## License
