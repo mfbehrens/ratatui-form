@@ -60,6 +60,18 @@ impl TextInput {
         self
     }
 
+    /// Returns the current text value.
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    /// Sets the current text value.
+    pub fn set_value(&mut self, value: impl Into<String>) {
+        self.value = value.into();
+        self.cursor_position = self.value.len();
+        self.selection = None;
+    }
+
     fn replace_selection(&mut self, replacement: &str) -> usize {
         let (start, end) = self.selection.take().expect("selection present");
         let end = end.min(self.value.len());

@@ -17,10 +17,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use ratatui_form::{
-    BasicField, FieldSpec, Form, FormExtractError, FormModel, FormResult, FormValue, Select,
-    TextInput,
-};
+use ratatui_form::{FieldSpec, FormFor, FormModel, FormResult, FormValue, Select, TextInput};
 
 /// A custom numeric type backed by a text input.
 #[derive(Clone, Debug, PartialEq)]
@@ -36,15 +33,11 @@ impl FormValue for Port {
         input.initial_value(value.0.to_string())
     }
 
-    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
-        let raw = form.value_str(index).ok_or_else(|| FormExtractError {
-            field_index: index,
-            message: "field not found in form".to_string(),
-        })?;
-        let port = raw.parse::<u16>().map_err(|_| FormExtractError {
-            field_index: index,
-            message: "expected a port number (0-65535)".to_string(),
-        })?;
+    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+        let raw = field.value();
+        let port = raw
+            .parse::<u16>()
+            .map_err(|_| "expected a port number (0-65535)".to_string())?;
         Ok(Port(port))
     }
 }
@@ -80,19 +73,13 @@ impl FormValue for Region {
         select.initial_value(value.as_str())
     }
 
-    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
-        let value = form.value_str(index).ok_or_else(|| FormExtractError {
-            field_index: index,
-            message: "field not found in form".to_string(),
-        })?;
-        match value.as_str() {
+    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+        let val = field.value();
+        match val {
             "us-east" => Ok(Region::UsEast),
             "us-west" => Ok(Region::UsWest),
             "eu-central" => Ok(Region::EuCentral),
-            other => Err(FormExtractError {
-                field_index: index,
-                message: format!("unknown region: {other}"),
-            }),
+            other => Err(format!("unknown region: {other}")),
         }
     }
 }
@@ -125,7 +112,10 @@ fn main() -> io::Result<()> {
         port: Port(8080),
         region: Region::UsEast,
     };
-    let mut form = Form::<ServerConfig>::from(prefill);
+    let mut form: FormFor<ServerConfig> = prefill.into();
+
+    // Direct typed field access:
+    // e.g. form.fields.name, form.fields.port, form.fields.region
 
     // Main loop. Output is captured and only printed once raw mode is off and
     // the alternate screen is left, otherwise it would be swallowed by the TUI.

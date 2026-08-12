@@ -10,7 +10,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use ratatui_form::{Form, FormModel, FormResult};
+use ratatui_form::{FormFor, FormModel, FormResult};
 
 /// A simple signup model. Each field maps to a text input or checkbox;
 /// `#[form(skip)]` fields are excluded from the form.
@@ -63,7 +63,10 @@ fn main() -> io::Result<()> {
         newsletter: true,
         id: 42,
     };
-    let mut form = Form::<Signup>::from(prefill);
+    let mut form: FormFor<Signup> = prefill.into();
+
+    // Access typed fields directly if needed:
+    // e.g. form.fields.name.value_str(), form.fields.newsletter.is_checked()
 
     // Main loop. Output is captured and only printed once raw mode is off and
     // the alternate screen is left, otherwise it would be swallowed by the TUI.

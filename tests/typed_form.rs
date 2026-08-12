@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_form::{
-    BasicField, FieldSpec, FormExtractError, FormModel, FormResult, FormValue, TextInput, TypedForm,
+    FieldSpec, Form, FormFields, FormFor, FormModel, FormResult, FormValue, TextInput,
 };
 
 #[derive(FormModel, Debug, PartialEq)]
@@ -45,13 +45,13 @@ fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
-fn type_text<T: FormModel>(form: &mut TypedForm<T>, text: &str) {
+fn type_text<F: FormFields>(form: &mut Form<F>, text: &str) {
     for c in text.chars() {
         form.handle_input(key(KeyCode::Char(c)));
     }
 }
 
-fn tab<T: FormModel>(form: &mut TypedForm<T>) {
+fn tab<F: FormFields>(form: &mut Form<F>) {
     form.handle_input(key(KeyCode::Tab));
 }
 
@@ -69,9 +69,17 @@ fn round_trip_preserves_seeded_values() {
 
 #[test]
 fn into_conversion_from_model() {
-    let form: TypedForm<Signup> = sample().into();
+    let form: FormFor<Signup> = sample().into();
     let out = Signup::try_from(form).unwrap();
     assert_eq!(out.name, "Alice");
+}
+
+#[test]
+fn direct_named_field_access() {
+    let form = sample().get_form();
+    assert_eq!(form.fields.name.value(), "Alice");
+    assert_eq!(form.fields.email.value(), "alice@example.com");
+    assert!(form.fields.newsletter.is_checked());
 }
 
 #[test]
@@ -247,19 +255,14 @@ fn ipv4_unparsable_fails_extraction() {
 struct Department(String);
 
 impl FormValue for Department {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn BasicField> {
-        Box::new(TextInput::new(spec.label).initial_value(value.0.clone()))
+    type FieldType = TextInput;
+
+    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
+        TextInput::new(spec.label).initial_value(value.0.clone())
     }
 
-    fn form_extract<M: FormModel>(
-        form: &TypedForm<M>,
-        index: usize,
-    ) -> Result<Self, FormExtractError> {
-        let value = form.value_str(index).ok_or_else(|| FormExtractError {
-            field_index: index,
-            message: "field not found in form".to_string(),
-        })?;
-        Ok(Department(value))
+    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+        Ok(Department(field.value().to_string()))
     }
 }
 
@@ -304,22 +307,15 @@ fn custom_type_editing() {
 struct Port(u16);
 
 impl FormValue for Port {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn BasicField> {
-        Box::new(TextInput::new(spec.label).initial_value(value.0.to_string()))
+    type FieldType = TextInput;
+
+    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
+        TextInput::new(spec.label).initial_value(value.0.to_string())
     }
 
-    fn form_extract<M: FormModel>(
-        form: &TypedForm<M>,
-        index: usize,
-    ) -> Result<Self, FormExtractError> {
-        let value = form.value_str(index).ok_or_else(|| FormExtractError {
-            field_index: index,
-            message: "field not found in form".to_string(),
-        })?;
-        let port = value.parse().map_err(|_| FormExtractError {
-            field_index: index,
-            message: "expected a port".to_string(),
-        })?;
+    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+        let value = field.value();
+        let port = value.parse().map_err(|_| "expected a port".to_string())?;
         Ok(Port(port))
     }
 }

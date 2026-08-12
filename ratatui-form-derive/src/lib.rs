@@ -1,38 +1,16 @@
 //! Derive macro for `ratatui-form`.
 //!
 //! `#[derive(FormModel)]` turns a struct into a form model: it generates a
-//! [`FormModel`] impl with a `get_form` method that builds a form seeded with
-//! the struct's current values, and a `TryFrom<Form<T>>` impl that
-//! converts the edited form back into the struct.
-//!
-//! Fields are addressed by their position in the form, in struct order
-//! (skipped fields are excluded).
-//!
-//! Field construction and extraction are delegated to the
-//! [`FormValue`](https://docs.rs/ratatui-form/latest/ratatui_form/trait.FormValue.html)
-//! trait in the `ratatui-form` crate, so any type can be used as a field as
-//! long as `FormValue` is implemented for it. The library implements it for
-//! `String`, `Option<String>`, `bool`, `std::net::Ipv4Addr`,
-//! `std::net::Ipv6Addr`, and the numeric types (`u8`..`u64`, `i8`..`i64`,
-//! `f32`, `f64`, and their size variants); implement it yourself to add
-//! completely custom types.
-//!
-//! Field attributes:
-//! - `#[form(label = "…")]` — display label (defaults to the humanized name)
-//! - `#[form(placeholder = "…")]` — text input placeholder
-//! - `#[form(required)]` — mark the field as required
-//! - `#[form(validate = path)]` — a `fn(&str) -> bool` validator (repeatable)
-//! - `#[form(skip)]` — exclude the field from the form; restored via `Default`
-//!
-//! Struct attribute:
-//! - `#[form(title = "…")]` — the form title (defaults to the struct name)
+//! submodule containing a `Fields` struct that holds typed form input controls,
+//! implements `FormFields`, `FormModel`, and `TryFrom<Form<Fields>>` to convert
+//! the edited form back into the struct.
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::quote;
 use syn::{
-    parse_macro_input, punctuated::Punctuated, Attribute, Data, DeriveInput, Expr, Field, Fields,
+    parse_macro_input, punctuated::Punctuated, Attribute, Data, DeriveInput, Expr, Fields,
     Ident, Lit, Meta, Token,
 };
 
@@ -43,8 +21,6 @@ fn crate_path() -> TokenStream2 {
             let ident = Ident::new(&name, proc_macro2::Span::call_site());
             quote!(::#ident)
         }
-        // Within ratatui-form's own examples/tests the derive is "itself", but
-        // those are separate crates; reference the library by its lib name.
         Ok(FoundCrate::Itself) | Err(_) => quote!(::ratatui_form),
     }
 }
@@ -92,55 +68,115 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
         None => humanize(&ident.to_string()),
     };
 
-    let mut pushes: Vec<TokenStream2> = Vec::new();
+    let mod_name = format!("{}_form", to_snake_case(&ident.to_string()));
+    let mod_ident = Ident::new(&mod_name, ident.span());
+
+    let mut struct_fields: Vec<TokenStream2> = Vec::new();
+    let mut mut_refs: Vec<TokenStream2> = Vec::new();
+    let mut immut_refs: Vec<TokenStream2> = Vec::new();
+    let mut field_inits: Vec<TokenStream2> = Vec::new();
     let mut extractions: Vec<TokenStream2> = Vec::new();
     let mut assignments: Vec<TokenStream2> = Vec::new();
-    let mut index = 0;
+    let mut index = 0usize;
 
     for field in fields {
         let Some(fident) = &field.ident else {
             return Err(syn::Error::new_spanned(field, "unnamed struct field"));
         };
         let attrs = parse_field_attrs(&field.attrs)?;
+        let ty = &field.ty;
 
         if attrs.skip {
-            let ty = &field.ty;
-            extractions.push(quote!(let #fident: #ty = Default::default();));
+            assignments.push(quote!(#fident: ::core::default::Default::default()));
         } else {
             let label = attrs
                 .label
                 .clone()
                 .unwrap_or_else(|| humanize(&fident.to_string()));
-            pushes.push(build_field(field, &label, &attrs, &krate)?);
-            extractions.push(build_extraction(field, index, ident, &krate)?);
+
+            let spec_expr = build_field_spec(label, &attrs)?;
+
+            struct_fields.push(quote!(pub #fident: <#ty as #krate::FormValue>::FieldType));
+            mut_refs.push(quote!(&mut self.#fident));
+            immut_refs.push(quote!(&self.#fident));
+            field_inits.push(
+                quote!(#fident: <#ty as #krate::FormValue>::form_field(#spec_expr, &self.#fident)),
+            );
+
+            let fname_str = fident.to_string();
+            let idx_lit = syn::Index::from(index);
+
+            extractions.push(quote! {
+                let #fident = match <#ty as #krate::FormValue>::form_extract(&form.fields.#fident) {
+                    Ok(value) => ::core::option::Option::Some(value),
+                    Err(msg) => {
+                        errors.push(#krate::FormExtractError::new(#idx_lit, #fname_str, msg));
+                        ::core::option::Option::None
+                    }
+                };
+            });
+
+            assignments.push(quote!(#fident: #fident.unwrap()));
             index += 1;
         }
-
-        assignments.push(quote!(#fident));
     }
+
+    let form_fields_mod = quote! {
+        #[allow(non_snake_case)]
+        pub mod #mod_ident {
+            use super::*;
+
+            pub struct Fields {
+                #(#struct_fields,)*
+            }
+
+            impl #krate::FormFields for Fields {
+                fn fields_mut(&mut self) -> ::std::vec::Vec<&mut dyn #krate::BasicField> {
+                    ::std::vec![#(#mut_refs),*]
+                }
+
+                fn fields(&self) -> ::std::vec::Vec<&dyn #krate::BasicField> {
+                    ::std::vec![#(#immut_refs),*]
+                }
+            }
+        }
+    };
 
     let form_model_impl = quote! {
         impl #krate::FormModel for #ident {
-            fn get_form(&self) -> #krate::Form<Self> {
-                let mut form = #krate::Form::<Self>::new(#title);
-                #(#pushes)*
-                form
+            type Fields = #mod_ident::Fields;
+
+            fn get_form(&self) -> #krate::Form<Self::Fields> {
+                let fields = #mod_ident::Fields {
+                    #(#field_inits,)*
+                };
+                #krate::Form::new(#title, fields)
             }
         }
     };
 
     let try_from_impl = quote! {
-        impl std::convert::TryFrom<#krate::Form<#ident>> for #ident {
-            type Error = Vec<#krate::FormExtractError>;
+        impl ::std::convert::TryFrom<#krate::Form<#mod_ident::Fields>> for #ident {
+            type Error = ::std::vec::Vec<#krate::FormExtractError>;
 
-            fn try_from(form: #krate::Form<#ident>) -> Result<Self, Self::Error> {
+            fn try_from(form: #krate::Form<#mod_ident::Fields>) -> Result<Self, Self::Error> {
+                let mut errors = ::std::vec::Vec::new();
+
                 #(#extractions)*
-                Ok(Self { #(#assignments,)* })
+
+                if !errors.is_empty() {
+                    return Err(errors);
+                }
+
+                Ok(Self {
+                    #(#assignments,)*
+                })
             }
         }
     };
 
     Ok(quote! {
+        #form_fields_mod
         #form_model_impl
         #try_from_impl
     })
@@ -218,16 +254,8 @@ fn expr_to_string(expr: &Expr) -> syn::Result<String> {
     ))
 }
 
-fn build_field(
-    field: &Field,
-    label: &str,
-    attrs: &FieldAttrs,
-    krate: &TokenStream2,
-) -> syn::Result<TokenStream2> {
-    let Some(field_ident) = &field.ident else {
-        return Err(syn::Error::new_spanned(field, "unnamed struct field"));
-    };
-
+fn build_field_spec(label: String, attrs: &FieldAttrs) -> syn::Result<TokenStream2> {
+    let krate = crate_path();
     let mut validators: Vec<TokenStream2> = Vec::new();
     for validator in &attrs.validators {
         let validator = validator_expr(validator)?;
@@ -241,35 +269,12 @@ fn build_field(
     let required = attrs.required;
 
     Ok(quote! {
-        form.push(Box::new(#krate::FormValue::form_field(
-            #krate::FieldSpec {
-                label: #label.to_string(),
-                placeholder: #placeholder,
-                required: #required,
-                validators: ::std::vec![#(#validators),*],
-            },
-            &self.#field_ident,
-        )));
-    })
-}
-
-fn build_extraction(
-    field: &Field,
-    index: usize,
-    model: &Ident,
-    krate: &TokenStream2,
-) -> syn::Result<TokenStream2> {
-    let Some(fident) = &field.ident else {
-        return Err(syn::Error::new_spanned(field, "unnamed struct field"));
-    };
-    let ty = &field.ty;
-    let idx = syn::Index::from(index);
-
-    Ok(quote! {
-        let #fident: #ty = match #krate::FormValue::form_extract::<#model>(&form, #idx) {
-            Ok(value) => value,
-            Err(err) => return Err(::std::vec![err]),
-        };
+        #krate::FieldSpec {
+            label: #label.to_string(),
+            placeholder: #placeholder,
+            required: #required,
+            validators: ::std::vec![#(#validators),*],
+        }
     })
 }
 
@@ -284,6 +289,23 @@ fn validator_expr(expr: &Expr) -> syn::Result<TokenStream2> {
     }
 }
 
+fn to_snake_case(s: &str) -> String {
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 {
+                out.push('_');
+            }
+            for lc in c.to_lowercase() {
+                out.push(lc);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 fn humanize(name: &str) -> String {
     name.split('_')
         .filter(|word| !word.is_empty())
@@ -292,11 +314,6 @@ fn humanize(name: &str) -> String {
         .join(" ")
 }
 
-/// Formats a single snake_case word.
-///
-/// Short all-lowercase words are treated as initialisms and uppercased
-/// (`ip` → `IP`, `id` → `ID`), everything else is capitalized normally
-/// (`name` → `Name`, `ipv6` → `Ipv6`).
 fn humanize_word(word: &str) -> String {
     let is_initialism = word.len() <= 3 && word.chars().all(|c| c.is_ascii_lowercase());
     if is_initialism {
@@ -312,7 +329,13 @@ fn humanize_word(word: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::humanize;
+    use super::{humanize, to_snake_case};
+
+    #[test]
+    fn converts_snake_case() {
+        assert_eq!(to_snake_case("Signup"), "signup");
+        assert_eq!(to_snake_case("ServerConfig"), "server_config");
+    }
 
     #[test]
     fn separates_snake_case_words() {

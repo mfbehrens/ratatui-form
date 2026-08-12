@@ -56,6 +56,7 @@ impl FocusManager {
     }
 
     /// Sets the total number of fields.
+    #[allow(dead_code)]
     pub fn set_field_count(&mut self, count: usize) {
         self.field_count = count;
         if self.current_index >= count {

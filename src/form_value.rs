@@ -1,7 +1,6 @@
 //! Mapping between model values and form fields.
 
-use crate::field_base::{BasicField, Checkbox, TextInput};
-use crate::model::{Form, FormExtractError, FormModel};
+use crate::field_base::{Checkbox, TextInput};
 use crate::validation::{rules, Validator};
 
 /// Configuration for building a form field from a model value.
@@ -26,41 +25,34 @@ pub struct FieldSpec {
 /// Implement this trait to add completely custom field types:
 ///
 /// ```
-/// use ratatui_form::{FieldSpec, Form, FormExtractError, FormModel, FormValue, TextInput};
+/// use ratatui_form::{FieldSpec, FormValue, TextInput};
 ///
 /// #[derive(Clone)]
 /// struct Port(u16);
 ///
 /// impl FormValue for Port {
-///     fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn ratatui_form::BasicField> {
-///         Box::new(TextInput::new(spec.label).initial_value(value.0.to_string()))
+///     type FieldType = TextInput;
+///
+///     fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
+///         TextInput::new(spec.label).initial_value(value.0.to_string())
 ///     }
 ///
-///     fn form_extract<M: FormModel>(
-///         form: &Form<M>,
-///         index: usize,
-///     ) -> Result<Self, FormExtractError> {
-///         let value = form.value_str(index).ok_or_else(|| FormExtractError {
-///             field_index: index,
-///             message: "field not found in form".to_string(),
-///         })?;
-///         let port = value.parse().map_err(|_| FormExtractError {
-///             field_index: index,
-///             message: "expected a port number".to_string(),
-///         })?;
+///     fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+///         let raw = field.value();
+///         let port = raw.parse().map_err(|_| "expected a port number".to_string())?;
 ///         Ok(Port(port))
 ///     }
 /// }
 /// ```
 pub trait FormValue: Sized {
-    /// Type of the Form Field
+    /// Type of the Form Field widget (e.g. `TextInput`, `Checkbox`, `Select`).
     type FieldType;
 
     /// Builds a form field widget seeded with `value`.
     fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType;
 
-    /// Extracts a value of this type from the form at `index`.
-    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError>;
+    /// Extracts a value of this type from the field widget.
+    fn form_extract(field: &Self::FieldType) -> Result<Self, String>;
 }
 
 /// Builds a text input from a spec, seeded with `value`.
@@ -84,22 +76,14 @@ fn text_input(spec: FieldSpec, value: String, rule: Option<Box<dyn Validator>>) 
     input.initial_value(value)
 }
 
-/// The error returned when a field index is out of bounds.
-fn missing_field(index: usize) -> FormExtractError {
-    FormExtractError {
-        field_index: index,
-        message: "field not found in form".to_string(),
-    }
-}
-
 impl FormValue for String {
     type FieldType = TextInput;
     fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
         text_input(spec, value.clone(), None)
     }
 
-    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
-        form.value_str(index).ok_or_else(|| missing_field(index))
+    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+        Ok(field.value().to_string())
     }
 }
 
@@ -109,12 +93,13 @@ impl FormValue for Option<String> {
         text_input(spec, value.clone().unwrap_or_default(), None)
     }
 
-    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
-        Ok(match form.value_str(index) {
-            Some(value) if value.is_empty() => None,
-            Some(value) => Some(value),
-            None => None,
-        })
+    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+        let val = field.value();
+        if val.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(val.to_string()))
+        }
     }
 }
 
@@ -128,11 +113,8 @@ impl FormValue for bool {
         checkbox.checked(*value)
     }
 
-    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
-        form.value_bool(index).ok_or_else(|| FormExtractError {
-            field_index: index,
-            message: "expected a boolean".to_string(),
-        })
+    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+        Ok(field.is_checked())
     }
 }
 
@@ -142,20 +124,11 @@ macro_rules! impl_numeric_form_value {
             impl FormValue for $ty {
                 type FieldType = TextInput;
                 fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
-                    // Numeric fields have no meaningful empty value, so they
-                    // are always required regardless of `spec.required`.
                     text_input(spec, value.to_string(), Some(Box::new(rules::Numeric))).required()
                 }
 
-                fn form_extract<M: FormModel>(
-                    form: &Form<M>,
-                    index: usize,
-                ) -> Result<Self, FormExtractError> {
-                    let raw = form.value_str(index).ok_or_else(|| missing_field(index))?;
-                    raw.parse::<Self>().map_err(|_| FormExtractError {
-                        field_index: index,
-                        message: "expected a number".to_string(),
-                    })
+                fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+                    field.value().parse::<Self>().map_err(|_| "expected a number".to_string())
                 }
             }
         )*
@@ -170,20 +143,11 @@ macro_rules! impl_ip_form_value {
             impl FormValue for $ty {
                 type FieldType = TextInput;
                 fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
-                    // IP fields have no meaningful empty value, so they are
-                    // always required regardless of `spec.required`.
                     text_input(spec, value.to_string(), Some(Box::new($rule))).required()
                 }
 
-                fn form_extract<M: FormModel>(
-                    form: &Form<M>,
-                    index: usize,
-                ) -> Result<Self, FormExtractError> {
-                    let raw = form.value_str(index).ok_or_else(|| missing_field(index))?;
-                    raw.parse::<Self>().map_err(|_| FormExtractError {
-                        field_index: index,
-                        message: $message.to_string(),
-                    })
+                fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+                    field.value().parse::<Self>().map_err(|_| $message.to_string())
                 }
             }
         )*

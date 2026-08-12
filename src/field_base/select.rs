@@ -55,6 +55,14 @@ impl Select {
         self
     }
 
+    /// Returns the currently selected value as a string slice, or empty string if none.
+    pub fn value(&self) -> &str {
+        self.selected_index
+            .and_then(|i| self.options.get(i))
+            .map(|(v, _)| v.as_str())
+            .unwrap_or("")
+    }
+
     fn toggle_open(&mut self) {
         self.is_open = !self.is_open;
         if self.is_open {
