@@ -10,11 +10,11 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use ratatui_form::{FormFor, FormModel, FormResult};
+use ratatui_form::{FormFor, FormResult, TypedForm};
 
 /// A simple signup model. Each field maps to a text input or checkbox;
 /// `#[form(skip)]` fields are excluded from the form.
-#[derive(Debug, FormModel)]
+#[derive(Debug, TypedForm)]
 #[form(title = "Sign Up")]
 struct Signup {
     #[form(label = "Full Name", required, placeholder = "Ada Lovelace")]

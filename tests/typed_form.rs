@@ -2,10 +2,10 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_form::{
-    FieldSpec, Form, FormFields, FormFor, FormModel, FormResult, FormValue, TextInput,
+    FieldAttributes, FieldType, Form, FormFields, FormFor, FormModel, FormResult, TextInput,
 };
 
-#[derive(FormModel, Debug, PartialEq)]
+#[derive(RatatuiTypedForm, Debug, PartialEq)]
 struct Signup {
     #[form(label = "Full Name", required, placeholder = "Ada Lovelace")]
     name: String,
@@ -188,7 +188,7 @@ fn form_result_cancelled_on_escape() {
     assert!(!form.is_active());
 }
 
-#[derive(FormModel, Debug, PartialEq)]
+#[derive(RatatuiTypedForm, Debug, PartialEq)]
 struct Network {
     host: String,
 
@@ -254,19 +254,19 @@ fn ipv4_unparsable_fails_extraction() {
 #[derive(Clone, Debug, PartialEq)]
 struct Department(String);
 
-impl FormValue for Department {
-    type FieldType = TextInput;
+impl FieldType for Department {
+    type BaseFieldType = TextInput;
 
-    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
+    fn form_field(spec: FieldAttributes, value: &Self) -> Self::BaseFieldType {
         TextInput::new(spec.label).initial_value(value.0.clone())
     }
 
-    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+    fn form_extract(field: &Self::BaseFieldType) -> Result<Self, String> {
         Ok(Department(field.value().to_string()))
     }
 }
 
-#[derive(FormModel, Debug, PartialEq)]
+#[derive(RatatuiTypedForm, Debug, PartialEq)]
 struct Employee {
     name: String,
     department: Department,
@@ -306,21 +306,21 @@ fn custom_type_editing() {
 #[derive(Clone, Debug, PartialEq)]
 struct Port(u16);
 
-impl FormValue for Port {
-    type FieldType = TextInput;
+impl FieldType for Port {
+    type BaseFieldType = TextInput;
 
-    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
+    fn form_field(spec: FieldAttributes, value: &Self) -> Self::BaseFieldType {
         TextInput::new(spec.label).initial_value(value.0.to_string())
     }
 
-    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+    fn form_extract(field: &Self::BaseFieldType) -> Result<Self, String> {
         let value = field.value();
         let port = value.parse().map_err(|_| "expected a port".to_string())?;
         Ok(Port(port))
     }
 }
 
-#[derive(FormModel, Debug, PartialEq)]
+#[derive(RatatuiTypedForm, Debug, PartialEq)]
 struct Server {
     host: String,
     port: Port,
@@ -361,7 +361,7 @@ fn custom_type_replaces_seeded_value_on_focus() {
     assert_eq!(out.port, Port(9000));
 }
 
-#[derive(FormModel, Debug, PartialEq)]
+#[derive(RatatuiTypedForm, Debug, PartialEq)]
 struct Profile {
     username: String,
 

@@ -18,9 +18,9 @@
 //! ## Quick start
 //!
 //! ```no_run
-//! use ratatui_form::{FormModel, FormFor};
+//! use ratatui_form::{TypedForm, FormModel};
 //!
-//! #[derive(FormModel)]
+//! #[derive(TypedForm)]
 //! #[form(title = "Sign Up")]
 //! struct Signup {
 //!     #[form(label = "Full Name", required, placeholder = "Ada Lovelace")]
@@ -37,7 +37,7 @@
 //! }
 //!
 //! let model = Signup { name: "Ada".into(), age: 37, newsletter: true, id: 1 };
-//! let mut form: FormFor<Signup> = model.into();
+//! let mut form = model.get_form();
 //! // Access typed fields directly:
 //! assert_eq!(form.fields.name.value(), "Ada");
 //! let back: Signup = Signup::try_from(form).unwrap();
@@ -47,20 +47,20 @@
 //! See `examples/derive_form.rs` for the full event-loop wiring with
 //! `crossterm` + `ratatui::Terminal`.
 
-pub mod field_base;
+pub mod base_field_types;
+pub mod field_types;
 pub mod form;
 pub mod model;
 pub mod style;
 pub mod validation;
 
-mod form_value;
 mod navigation;
 
-pub use field_base::{BasicField, Checkbox, Select, TextInput};
+pub use base_field_types::{BasicFieldType, Checkbox, Select, TextInput};
+pub use field_types::{FieldAttributes, FieldType};
 pub use form::FormResult;
-pub use form_value::{FieldSpec, FormValue};
 pub use model::{Form, FormExtractError, FormFields, FormFor, FormModel};
-pub use ratatui_form_derive::FormModel;
+pub use ratatui_form_derive::TypedForm;
 pub use style::FormStyle;
-pub use validation::rules::{Email, Ipv4, Ipv6, MaxLength, MinLength, Numeric, Pattern, Required};
+// pub use validation::rules::{Email, Ipv4, Ipv6, MaxLength, MinLength, Numeric, Pattern, Required};
 pub use validation::{ValidationError, Validator};

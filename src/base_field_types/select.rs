@@ -5,7 +5,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
-use crate::field_base::{fill_row, render_label, BasicField};
+use crate::base_field_types::{fill_row, render_label, BasicFieldType};
 use crate::style::FormStyle;
 
 /// A select/dropdown field.
@@ -92,7 +92,7 @@ impl Select {
     }
 }
 
-impl BasicField for Select {
+impl BasicFieldType for Select {
     fn value_str(&self) -> String {
         self.selected_index
             .and_then(|i| self.options.get(i))

@@ -6,7 +6,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use unicode_width::UnicodeWidthStr;
 
-use crate::field_base::{fill_row, render_label, BasicField};
+use crate::base_field_types::{fill_row, render_label, BasicFieldType};
 use crate::style::FormStyle;
 use crate::validation::Validator;
 
@@ -158,7 +158,7 @@ impl TextInput {
     }
 }
 
-impl BasicField for TextInput {
+impl BasicFieldType for TextInput {
     fn value_str(&self) -> String {
         self.value.clone()
     }

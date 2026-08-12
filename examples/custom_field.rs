@@ -17,15 +17,15 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use ratatui_form::{FieldSpec, FormFor, FormModel, FormResult, FormValue, Select, TextInput};
+use ratatui_form::{FieldAttributes, FieldType, FormFor, FormResult, Select, TextInput, TypedForm};
 
 /// A custom numeric type backed by a text input.
 #[derive(Clone, Debug, PartialEq)]
 struct Port(u16);
 
-impl FormValue for Port {
-    type FieldType = TextInput;
-    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
+impl FieldType for Port {
+    type BaseFieldType = TextInput;
+    fn form_field(spec: FieldAttributes, value: &Self) -> Self::BaseFieldType {
         let mut input = TextInput::new(spec.label);
         if spec.required {
             input = input.required();
@@ -33,7 +33,7 @@ impl FormValue for Port {
         input.initial_value(value.0.to_string())
     }
 
-    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+    fn form_extract(field: &Self::BaseFieldType) -> Result<Self, String> {
         let raw = field.value();
         let port = raw
             .parse::<u16>()
@@ -60,9 +60,9 @@ impl Region {
     }
 }
 
-impl FormValue for Region {
-    type FieldType = Select;
-    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
+impl FieldType for Region {
+    type BaseFieldType = Select;
+    fn form_field(spec: FieldAttributes, value: &Self) -> Self::BaseFieldType {
         let mut select = Select::new(spec.label)
             .option("us-east", "US East (Virginia)")
             .option("us-west", "US West (Oregon)")
@@ -73,7 +73,7 @@ impl FormValue for Region {
         select.initial_value(value.as_str())
     }
 
-    fn form_extract(field: &Self::FieldType) -> Result<Self, String> {
+    fn form_extract(field: &Self::BaseFieldType) -> Result<Self, String> {
         let val = field.value();
         match val {
             "us-east" => Ok(Region::UsEast),
@@ -85,7 +85,7 @@ impl FormValue for Region {
 }
 
 /// The model. `Port` and `Region` are used exactly like the built-in types.
-#[derive(Debug, FormModel)]
+#[derive(Debug, TypedForm)]
 #[form(title = "Server Configuration")]
 struct ServerConfig {
     #[form(label = "Server name", required)]

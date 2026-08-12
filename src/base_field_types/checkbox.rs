@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
 use unicode_width::UnicodeWidthStr;
 
-use crate::field_base::BasicField;
+use crate::base_field_types::BasicFieldType;
 use crate::style::FormStyle;
 
 /// A checkbox field.
@@ -54,7 +54,7 @@ impl Checkbox {
     }
 }
 
-impl BasicField for Checkbox {
+impl BasicFieldType for Checkbox {
     fn value_str(&self) -> String {
         if self.checked {
             "true".to_string()

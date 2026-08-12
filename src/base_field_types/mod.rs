@@ -63,7 +63,7 @@ pub(crate) fn fill_row(buf: &mut Buffer, area: Rect, style: ratatui::style::Styl
 }
 
 /// Trait for form fields.
-pub trait BasicField: Send + Sync {
+pub trait BasicFieldType: Send + Sync {
     // type ValueType;
     // /// Returns the current value of the field as a string.
     // fn value(&self) -> Self::ValueType;

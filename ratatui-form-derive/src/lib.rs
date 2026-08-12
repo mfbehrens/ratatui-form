@@ -10,8 +10,8 @@ use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::quote;
 use syn::{
-    parse_macro_input, punctuated::Punctuated, Attribute, Data, DeriveInput, Expr, Fields,
-    Ident, Lit, Meta, Token,
+    parse_macro_input, punctuated::Punctuated, Attribute, Data, DeriveInput, Expr, Fields, Ident,
+    Lit, Meta, Token,
 };
 
 /// Path used to refer to the `ratatui-form` crate in generated code.
@@ -26,7 +26,7 @@ fn crate_path() -> TokenStream2 {
 }
 
 /// Derives `FormModel` for a struct.
-#[proc_macro_derive(FormModel, attributes(form))]
+#[proc_macro_derive(TypedForm, attributes(form))]
 pub fn derive_form_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     match impl_form_model(&input) {
@@ -96,18 +96,18 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
             let spec_expr = build_field_spec(label, &attrs)?;
 
-            struct_fields.push(quote!(pub #fident: <#ty as #krate::FormValue>::FieldType));
+            struct_fields.push(quote!(pub #fident: <#ty as #krate::FieldType>::BaseFieldType));
             mut_refs.push(quote!(&mut self.#fident));
             immut_refs.push(quote!(&self.#fident));
             field_inits.push(
-                quote!(#fident: <#ty as #krate::FormValue>::form_field(#spec_expr, &self.#fident)),
+                quote!(#fident: <#ty as #krate::FieldType>::form_field(#spec_expr, &self.#fident)),
             );
 
             let fname_str = fident.to_string();
             let idx_lit = syn::Index::from(index);
 
             extractions.push(quote! {
-                let #fident = match <#ty as #krate::FormValue>::form_extract(&form.fields.#fident) {
+                let #fident = match <#ty as #krate::FieldType>::form_extract(&form.fields.#fident) {
                     Ok(value) => ::core::option::Option::Some(value),
                     Err(msg) => {
                         errors.push(#krate::FormExtractError::new(#idx_lit, #fname_str, msg));
@@ -131,11 +131,11 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
 
             impl #krate::FormFields for Fields {
-                fn fields_mut(&mut self) -> ::std::vec::Vec<&mut dyn #krate::BasicField> {
+                fn fields_mut(&mut self) -> ::std::vec::Vec<&mut dyn #krate::BasicFieldType> {
                     ::std::vec![#(#mut_refs),*]
                 }
 
-                fn fields(&self) -> ::std::vec::Vec<&dyn #krate::BasicField> {
+                fn fields(&self) -> ::std::vec::Vec<&dyn #krate::BasicFieldType> {
                     ::std::vec![#(#immut_refs),*]
                 }
             }
@@ -269,7 +269,7 @@ fn build_field_spec(label: String, attrs: &FieldAttrs) -> syn::Result<TokenStrea
     let required = attrs.required;
 
     Ok(quote! {
-        #krate::FieldSpec {
+        #krate::FieldAttributes {
             label: #label.to_string(),
             placeholder: #placeholder,
             required: #required,
