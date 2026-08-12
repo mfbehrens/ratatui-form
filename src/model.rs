@@ -7,11 +7,11 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
 use crate::field::Field;
-use crate::form::{Form, FormResult};
+use crate::form::{FormEngine, FormResult};
 use crate::style::FormStyle;
 use crate::validation::ValidationError;
 
-/// An error produced while extracting a model from a [`TypedForm`].
+/// An error produced while extracting a model from a [`Form`].
 #[derive(Debug, Clone)]
 pub struct FormExtractError {
     /// The index of the field that failed.
@@ -28,23 +28,23 @@ impl std::fmt::Display for FormExtractError {
 
 impl std::error::Error for FormExtractError {}
 
-/// A model type that can be rendered as a [`TypedForm`].
+/// A model type that can be rendered as a [`Form`].
 ///
 /// This trait is implemented by the `#[derive(FormModel)]` macro. The derive
 /// generates a `get_form` method that builds a form seeded with the current
-/// values of the struct, and a `TryFrom<TypedForm<Self>>` impl that converts
+/// values of the struct, and a `TryFrom<Form<Self>>` impl that converts
 /// the edited form back into a new struct instance.
 pub trait FormModel: Sized {
-    /// Returns a [`TypedForm`] seeded with this struct's current values.
+    /// Returns a [`Form`] seeded with this struct's current values.
     fn get_form(&self) -> Form<Self>;
 }
 
 /// A form tied to a model type `T`.
 ///
-/// `TypedForm<T>` wraps a [`Form`] and carries the model type, so the edited
+/// `Form<T>` wraps a [`FormEngine`] and carries the model type, so the edited
 /// values can be converted back into a `T` with `T::try_from(form)`.
 pub struct Form<T: FormModel> {
-    inner: Form,
+    inner: FormEngine,
     marker: PhantomData<T>,
 }
 
@@ -62,7 +62,7 @@ impl<T: FormModel> Form<T> {
     #[doc(hidden)]
     pub fn new(title: impl Into<String>) -> Self {
         Self {
-            inner: Form::new(title),
+            inner: FormEngine::new(title),
             marker: PhantomData,
         }
     }

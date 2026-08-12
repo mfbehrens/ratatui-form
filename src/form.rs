@@ -25,24 +25,26 @@ pub enum FormResult {
 /// A form holding an index-addressed list of fields.
 ///
 /// Fields are stored in a plain list; the index in that list is the field's
-/// id. Construct a form through [`TypedForm`](crate::TypedForm), usually via
+/// id. Construct a form through [`Form`](crate::Form), usually via
 /// `#[derive(FormModel)]`.
-pub struct Form {
+pub struct FormEngine {
     title: String,
     fields: Vec<Box<dyn Field>>,
     focus_manager: FocusManager,
+    last_focused: Option<usize>,
     style: FormStyle,
     result: FormResult,
     validation_errors: Vec<ValidationError>,
 }
 
-impl Form {
+impl FormEngine {
     /// Creates a new, empty form with the given title.
     pub fn new(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),
             fields: Vec::new(),
             focus_manager: FocusManager::new(0),
+            last_focused: None,
             style: FormStyle::default(),
             result: FormResult::Active,
             validation_errors: Vec::new(),
@@ -104,6 +106,7 @@ impl Form {
                 } else {
                     self.focus_manager.focus_next();
                 }
+                self.sync_focus();
                 return;
             }
             KeyCode::Enter if self.focus_manager.is_submit_focused() => {
@@ -115,12 +118,14 @@ impl Form {
                 if !self.delegate_to_focused_field(&event) {
                     self.focus_manager.focus_next();
                 }
+                self.sync_focus();
                 return;
             }
             KeyCode::Up => {
                 if !self.delegate_to_focused_field(&event) {
                     self.focus_manager.focus_previous();
                 }
+                self.sync_focus();
                 return;
             }
             _ => {}
@@ -130,10 +135,33 @@ impl Form {
         self.delegate_to_focused_field(&event);
     }
 
+    fn sync_focus(&mut self) {
+        let current = if self.focus_manager.is_submit_focused() {
+            None
+        } else {
+            Some(self.focus_manager.current_index())
+        };
+        if current == self.last_focused {
+            return;
+        }
+        if let Some(old) = self.last_focused {
+            if let Some(field) = self.fields.get_mut(old) {
+                field.on_blur();
+            }
+        }
+        if let Some(new) = current {
+            if let Some(field) = self.fields.get_mut(new) {
+                field.on_focus();
+            }
+        }
+        self.last_focused = current;
+    }
+
     fn delegate_to_focused_field(&mut self, event: &KeyEvent) -> bool {
         if self.focus_manager.is_submit_focused() {
             return false;
         }
+        self.sync_focus();
 
         let index = self.focus_manager.current_index();
         if let Some(field) = self.fields.get_mut(index) {
@@ -163,6 +191,7 @@ impl Form {
             if let Some(error) = self.validation_errors.first() {
                 self.focus_manager.focus_field(error.field_index);
             }
+            self.sync_focus();
         }
     }
 

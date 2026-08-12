@@ -113,6 +113,23 @@ impl Validator for Ipv4 {
     }
 }
 
+/// Validates that a value is a valid IPv6 address.
+pub struct Ipv6;
+
+impl Validator for Ipv6 {
+    fn validate(&self, value: &str) -> Result<(), String> {
+        if value.is_empty() {
+            return Ok(()); // Empty is OK, use Required for that
+        }
+
+        if value.parse::<std::net::Ipv6Addr>().is_ok() {
+            Ok(())
+        } else {
+            Err("Invalid IPv6 address".to_string())
+        }
+    }
+}
+
 /// Validates against a regex pattern.
 pub struct Pattern {
     regex: regex::Regex,

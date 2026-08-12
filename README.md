@@ -249,6 +249,10 @@ impl Validator for EvenNumber {
 | `Ctrl+E` | Move cursor to end |
 | `Ctrl+U` | Clear field |
 
+When a text field gains focus its value is selected, so the first keystroke
+replaces it. Press `End` or an arrow key to clear the selection and append
+instead.
+
 ## Theming
 
 ### Using Presets

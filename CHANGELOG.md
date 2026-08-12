@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Text fields select their value when they gain focus, so the first keystroke
+  replaces it instead of appending. Press `End` or an arrow key to append.
+  This fixes editing pre-filled numeric fields, which previously produced
+  out-of-range values like `"8080" + "123"`.
+
+### Changed
+- The `FormModel` derive no longer hardcodes a type→field mapping. Field
+  construction and extraction are now delegated to the new `FormValue` trait,
+  so completely custom field types can be added by implementing `FormValue`.
+  Built-in implementations cover `String`, `Option<String>`, `bool`,
+  `std::net::Ipv4Addr`, `std::net::Ipv6Addr`, and all numeric types.
+
 ## [0.1.1] - 2025-01-31
 
 ### Changed

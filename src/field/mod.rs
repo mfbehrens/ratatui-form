@@ -31,6 +31,12 @@ pub trait Field: Send + Sync {
     /// Handles keyboard input. Returns true if the input was consumed.
     fn handle_input(&mut self, event: &KeyEvent) -> bool;
 
+    /// Called when the field gains focus.
+    fn on_focus(&mut self) {}
+
+    /// Called when the field loses focus.
+    fn on_blur(&mut self) {}
+
     /// Validates the field and returns any error messages.
     fn validate(&self) -> Result<(), Vec<String>>;
 

@@ -1,7 +1,9 @@
-//! Integration tests for the `FormModel` derive and `TypedForm`.
+//! Integration tests for the `FormModel` derive and `Form`.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui_form::{Form, FormModel, FormResult};
+use ratatui_form::{
+    Field, FieldSpec, Form, FormExtractError, FormModel, FormResult, FormValue, TextInput,
+};
 
 #[derive(FormModel, Debug, PartialEq)]
 struct Signup {
@@ -85,7 +87,9 @@ fn fields_are_addressed_by_index() {
 fn editing_fields_changes_extraction() {
     let mut form = sample().get_form();
 
-    // Focus starts on the first field (index 0); typing appends.
+    // Focus starts on the first field (index 0). The seeded value is selected
+    // on focus; pressing End clears the selection so typing appends.
+    form.handle_input(key(KeyCode::End));
     type_text(&mut form, " B.");
 
     // Move to the optional company field (index 3) and clear it.
@@ -235,4 +239,122 @@ fn ipv4_unparsable_fails_extraction() {
 
     let err = Network::try_from(form).unwrap_err();
     assert!(err.iter().any(|e| e.field_index == 1));
+}
+
+/// A completely custom field type: the derive knows nothing about it and
+/// relies entirely on the `FormValue` implementation.
+#[derive(Clone, Debug, PartialEq)]
+struct Department(String);
+
+impl FormValue for Department {
+    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+        Box::new(TextInput::new(spec.label).initial_value(value.0.clone()))
+    }
+
+    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
+        let value = form.value_str(index).ok_or_else(|| FormExtractError {
+            field_index: index,
+            message: "field not found in form".to_string(),
+        })?;
+        Ok(Department(value))
+    }
+}
+
+#[derive(FormModel, Debug, PartialEq)]
+struct Employee {
+    name: String,
+    department: Department,
+}
+
+#[test]
+fn custom_type_round_trip() {
+    let model = Employee {
+        name: "Grace".into(),
+        department: Department("Engineering".into()),
+    };
+
+    let form = model.get_form();
+    assert_eq!(form.value_str(1).as_deref(), Some("Engineering"));
+
+    let out = Employee::try_from(form).unwrap();
+    assert_eq!(out, model);
+}
+
+#[test]
+fn custom_type_editing() {
+    let mut form = Employee {
+        name: "Grace".into(),
+        department: Department("Engineering".into()),
+    }
+    .get_form();
+
+    tab(&mut form); // department (index 1)
+                    // The seeded value is selected on focus; press End to append.
+    form.handle_input(key(KeyCode::End));
+    type_text(&mut form, " Ops");
+
+    let out = Employee::try_from(form).unwrap();
+    assert_eq!(out.department.0, "Engineering Ops");
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Port(u16);
+
+impl FormValue for Port {
+    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+        Box::new(TextInput::new(spec.label).initial_value(value.0.to_string()))
+    }
+
+    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
+        let value = form.value_str(index).ok_or_else(|| FormExtractError {
+            field_index: index,
+            message: "field not found in form".to_string(),
+        })?;
+        let port = value.parse().map_err(|_| FormExtractError {
+            field_index: index,
+            message: "expected a port".to_string(),
+        })?;
+        Ok(Port(port))
+    }
+}
+
+#[derive(FormModel, Debug, PartialEq)]
+struct Server {
+    host: String,
+    port: Port,
+}
+
+#[test]
+fn custom_type_extraction_failure() {
+    let mut form = Server {
+        host: "localhost".into(),
+        port: Port(8080),
+    }
+    .get_form();
+
+    tab(&mut form); // port (index 1)
+    for _ in 0.."8080".len() {
+        form.handle_input(key(KeyCode::Backspace));
+    }
+    type_text(&mut form, "abc");
+
+    let err = Server::try_from(form).unwrap_err();
+    assert!(err.iter().any(|e| e.field_index == 1));
+}
+
+#[test]
+fn custom_type_replaces_seeded_value_on_focus() {
+    let mut form = Server {
+        host: "localhost".into(),
+        port: Port(8080),
+    }
+    .get_form();
+
+    tab(&mut form); // port (index 1)
+                    // The seeded value is selected on focus, so the first keystroke replaces
+                    // it instead of appending (previously "8080" + typed digits overflowed u16).
+    type_text(&mut form, "9000");
+
+    let out = Server::try_from(form).unwrap();
+    assert_eq!(out.port, Port(9000));
 }

@@ -2,15 +2,20 @@
 //!
 //! `#[derive(FormModel)]` turns a struct into a form model: it generates a
 //! [`FormModel`] impl with a `get_form` method that builds a form seeded with
-//! the struct's current values, and a `TryFrom<TypedForm<T>>` impl that
+//! the struct's current values, and a `TryFrom<Form<T>>` impl that
 //! converts the edited form back into the struct.
 //!
 //! Fields are addressed by their position in the form, in struct order
 //! (skipped fields are excluded).
 //!
-//! Supported field types: `String`, `Option<String>`, `bool`, `std::net::Ipv4Addr`,
-//! and the numeric types (`u8`..`u64`, `i8`..`i64`, `f32`, `f64`, and their size
-//! variants). IPv4 fields are required and validated.
+//! Field construction and extraction are delegated to the
+//! [`FormValue`](https://docs.rs/ratatui-form/latest/ratatui_form/trait.FormValue.html)
+//! trait in the `ratatui-form` crate, so any type can be used as a field as
+//! long as `FormValue` is implemented for it. The library implements it for
+//! `String`, `Option<String>`, `bool`, `std::net::Ipv4Addr`,
+//! `std::net::Ipv6Addr`, and the numeric types (`u8`..`u64`, `i8`..`i64`,
+//! `f32`, `f64`, and their size variants); implement it yourself to add
+//! completely custom types.
 //!
 //! Field attributes:
 //! - `#[form(label = "…")]` — display label (defaults to the humanized name)
@@ -28,14 +33,8 @@ use proc_macro_crate::{crate_name, FoundCrate};
 use quote::quote;
 use syn::{
     parse_macro_input, punctuated::Punctuated, Attribute, Data, DeriveInput, Expr, Field, Fields,
-    GenericArgument, Ident, Lit, Meta, PathArguments, Token, Type, TypePath,
+    Ident, Lit, Meta, Token,
 };
-
-/// The number types supported as text fields.
-const NUMBER_TYPES: &[&str] = &[
-    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32",
-    "f64",
-];
 
 /// Path used to refer to the `ratatui-form` crate in generated code.
 fn crate_path() -> TokenStream2 {
@@ -113,7 +112,7 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 .clone()
                 .unwrap_or_else(|| humanize(&fident.to_string()));
             pushes.push(build_field(field, &label, &attrs, &krate)?);
-            extractions.push(build_extraction(field, index, &attrs, &krate)?);
+            extractions.push(build_extraction(field, index, ident, &krate)?);
             index += 1;
         }
 
@@ -122,8 +121,8 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let form_model_impl = quote! {
         impl #krate::FormModel for #ident {
-            fn get_form(&self) -> #krate::TypedForm<Self> {
-                let mut form = #krate::TypedForm::<Self>::new(#title);
+            fn get_form(&self) -> #krate::Form<Self> {
+                let mut form = #krate::Form::<Self>::new(#title);
                 #(#pushes)*
                 form
             }
@@ -131,18 +130,12 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
 
     let try_from_impl = quote! {
-        impl std::convert::TryFrom<#krate::TypedForm<#ident>> for #ident {
+        impl std::convert::TryFrom<#krate::Form<#ident>> for #ident {
             type Error = Vec<#krate::FormExtractError>;
 
-            fn try_from(form: #krate::TypedForm<#ident>) -> Result<Self, Self::Error> {
-                let mut errors: Vec<#krate::FormExtractError> = Vec::new();
+            fn try_from(form: #krate::Form<#ident>) -> Result<Self, Self::Error> {
                 #(#extractions)*
-
-                if errors.is_empty() {
-                    Ok(Self { #(#assignments,)* })
-                } else {
-                    Err(errors)
-                }
+                Ok(Self { #(#assignments,)* })
             }
         }
     };
@@ -225,72 +218,6 @@ fn expr_to_string(expr: &Expr) -> syn::Result<String> {
     ))
 }
 
-enum FieldKind {
-    String,
-    OptionString,
-    Bool,
-    Number,
-    Ipv4,
-}
-
-fn field_kind(field: &Field, attrs: &FieldAttrs) -> syn::Result<FieldKind> {
-    if attrs.skip {
-        return Ok(FieldKind::String); // arbitrary; only used for the "supported" check below
-    }
-
-    let ty = &field.ty;
-    let Type::Path(TypePath { qself: None, path }) = ty else {
-        return Err(unsupported(ty));
-    };
-
-    let segment = path
-        .segments
-        .last()
-        .ok_or_else(|| syn::Error::new_spanned(ty, "expected a concrete field type"))?;
-    let name = segment.ident.to_string();
-
-    match name.as_str() {
-        "String" if path.segments.len() == 1 => Ok(FieldKind::String),
-        "bool" if path.segments.len() == 1 => Ok(FieldKind::Bool),
-        "Option" => {
-            let inner = option_inner(segment)?;
-            if is_simple_type(inner, "String") {
-                Ok(FieldKind::OptionString)
-            } else {
-                Err(unsupported(ty))
-            }
-        }
-        n if NUMBER_TYPES.contains(&n) => Ok(FieldKind::Number),
-        "Ipv4Addr" => Ok(FieldKind::Ipv4),
-        _ => Err(unsupported(ty)),
-    }
-}
-
-fn option_inner(segment: &syn::PathSegment) -> syn::Result<&Type> {
-    match &segment.arguments {
-        PathArguments::AngleBracketed(args) => match args.args.first() {
-            Some(GenericArgument::Type(inner)) => Ok(inner),
-            _ => Err(syn::Error::new_spanned(segment, "expected `Option<T>`")),
-        },
-        _ => Err(syn::Error::new_spanned(segment, "expected `Option<T>`")),
-    }
-}
-
-fn is_simple_type(ty: &Type, name: &str) -> bool {
-    if let Type::Path(TypePath { qself: None, path }) = ty {
-        path.segments.len() == 1 && path.segments[0].ident == name
-    } else {
-        false
-    }
-}
-
-fn unsupported(ty: &Type) -> syn::Error {
-    syn::Error::new_spanned(
-        ty,
-        "unsupported field type for FormModel (supported: String, Option<String>, bool, std::net::Ipv4Addr, and numeric types)",
-    )
-}
-
 fn build_field(
     field: &Field,
     label: &str,
@@ -300,135 +227,49 @@ fn build_field(
     let Some(field_ident) = &field.ident else {
         return Err(syn::Error::new_spanned(field, "unnamed struct field"));
     };
-    let kind = field_kind(field, attrs)?;
 
-    let mut ts = match kind {
-        FieldKind::String | FieldKind::OptionString | FieldKind::Number | FieldKind::Ipv4 => {
-            quote!(#krate::TextInput::new(#label))
-        }
-        FieldKind::Bool => quote!(#krate::Checkbox::new(#label)),
-    };
-
-    if let Some(placeholder) = &attrs.placeholder {
-        if !matches!(kind, FieldKind::Bool) {
-            ts = quote!(#ts.placeholder(#placeholder));
-        }
-    }
-
-    match kind {
-        FieldKind::String | FieldKind::Bool => {
-            if attrs.required {
-                ts = quote!(#ts.required());
-            }
-        }
-        FieldKind::Number => {
-            ts = quote!(#ts.required().validator(Box::new(#krate::Numeric)));
-        }
-        FieldKind::Ipv4 => {
-            ts = quote!(#ts.required().validator(Box::new(#krate::Ipv4)));
-        }
-        FieldKind::OptionString => {}
-    }
-
+    let mut validators: Vec<TokenStream2> = Vec::new();
     for validator in &attrs.validators {
         let validator = validator_expr(validator)?;
-        ts = quote!(#ts.validator(Box::new(#validator)));
+        validators.push(quote!(Box::new(#validator)));
     }
 
-    ts = match kind {
-        FieldKind::String => quote!(#ts.initial_value(self.#field_ident.clone())),
-        FieldKind::OptionString => {
-            quote!(#ts.initial_value(self.#field_ident.clone().unwrap_or_default()))
-        }
-        FieldKind::Bool => quote!(#ts.checked(self.#field_ident)),
-        FieldKind::Number => quote!(#ts.initial_value(self.#field_ident.to_string())),
-        FieldKind::Ipv4 => quote!(#ts.initial_value(self.#field_ident.to_string())),
+    let placeholder = match &attrs.placeholder {
+        Some(placeholder) => quote!(::core::option::Option::Some(#placeholder.to_string())),
+        None => quote!(::core::option::Option::None),
     };
+    let required = attrs.required;
 
-    Ok(quote!(form.push(Box::new(#ts));))
+    Ok(quote! {
+        form.push(#krate::FormValue::form_field(
+            #krate::FieldSpec {
+                label: #label.to_string(),
+                placeholder: #placeholder,
+                required: #required,
+                validators: ::std::vec![#(#validators),*],
+            },
+            &self.#field_ident,
+        ));
+    })
 }
 
 fn build_extraction(
     field: &Field,
     index: usize,
-    attrs: &FieldAttrs,
+    model: &Ident,
     krate: &TokenStream2,
 ) -> syn::Result<TokenStream2> {
     let Some(fident) = &field.ident else {
         return Err(syn::Error::new_spanned(field, "unnamed struct field"));
     };
-    let kind = field_kind(field, attrs)?;
+    let ty = &field.ty;
     let idx = syn::Index::from(index);
 
-    let missing = quote! {
-        errors.push(#krate::FormExtractError {
-            field_index: #idx,
-            message: "field not found in form".to_string(),
-        });
-    };
-
-    Ok(match kind {
-        FieldKind::String => quote! {
-            let #fident: String = match form.value_str(#idx) {
-                Some(value) => value,
-                None => { #missing Default::default() }
-            };
-        },
-        FieldKind::OptionString => quote! {
-            let #fident: Option<String> = match form.value_str(#idx) {
-                Some(value) if value.is_empty() => None,
-                Some(value) => Some(value),
-                None => None,
-            };
-        },
-        FieldKind::Bool => quote! {
-            let #fident: bool = match form.value_bool(#idx) {
-                Some(value) => value,
-                None => {
-                    errors.push(#krate::FormExtractError {
-                        field_index: #idx,
-                        message: "expected a boolean".to_string(),
-                    });
-                    false
-                }
-            };
-        },
-        FieldKind::Number => {
-            let ty = &field.ty;
-            quote! {
-                let #fident: #ty = match form.value_str(#idx) {
-                    Some(value) => match value.parse::<#ty>() {
-                        Ok(n) => n,
-                        Err(_) => {
-                            errors.push(#krate::FormExtractError {
-                                field_index: #idx,
-                                message: "expected a number".to_string(),
-                            });
-                            Default::default()
-                        }
-                    },
-                    None => { #missing Default::default() }
-                };
-            }
-        }
-        FieldKind::Ipv4 => {
-            let ty = &field.ty;
-            quote! {
-                let #fident: #ty = match form.value_str(#idx) {
-                    Some(value) => match value.parse::<#ty>() {
-                        Ok(ip) => ip,
-                        Err(_) => {
-                            errors.push(#krate::FormExtractError {
-                                field_index: #idx,
-                                message: "expected an IPv4 address".to_string(),
-                            });
-                            std::net::Ipv4Addr::UNSPECIFIED
-                        }
-                    },
-                    None => { #missing std::net::Ipv4Addr::UNSPECIFIED }
-                };
-            }
-        }
+    Ok(quote! {
+        let #fident: #ty = match #krate::FormValue::form_extract::<#model>(&form, #idx) {
+            Ok(value) => value,
+            Err(err) => return Err(::std::vec![err]),
+        };
     })
 }
 

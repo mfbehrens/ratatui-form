@@ -17,6 +17,7 @@ pub struct TextInput {
     label: String,
     value: String,
     cursor_position: usize,
+    selection: Option<(usize, usize)>,
     placeholder: Option<String>,
     required: bool,
     validators: Vec<Box<dyn Validator>>,
@@ -29,6 +30,7 @@ impl TextInput {
             label: label.into(),
             value: String::new(),
             cursor_position: 0,
+            selection: None,
             placeholder: None,
             required: false,
             validators: Vec::new(),
@@ -60,12 +62,39 @@ impl TextInput {
         self
     }
 
+    fn replace_selection(&mut self, replacement: &str) -> usize {
+        let (start, end) = self.selection.take().expect("selection present");
+        let end = end.min(self.value.len());
+        let start = start.min(end);
+        self.value.replace_range(start..end, replacement);
+        start + replacement.len()
+    }
+
+    fn delete_selection(&mut self) -> bool {
+        if let Some((start, end)) = self.selection.take() {
+            let end = end.min(self.value.len());
+            let start = start.min(end);
+            self.value.replace_range(start..end, "");
+            self.cursor_position = start;
+            true
+        } else {
+            false
+        }
+    }
+
     fn insert_char(&mut self, c: char) {
+        if self.selection.is_some() {
+            self.cursor_position = self.replace_selection(&c.to_string());
+            return;
+        }
         self.value.insert(self.cursor_position, c);
         self.cursor_position += c.len_utf8();
     }
 
     fn delete_char_before_cursor(&mut self) {
+        if self.delete_selection() {
+            return;
+        }
         if self.cursor_position > 0 {
             let prev_char_boundary = self.value[..self.cursor_position]
                 .char_indices()
@@ -78,12 +107,16 @@ impl TextInput {
     }
 
     fn delete_char_at_cursor(&mut self) {
+        if self.delete_selection() {
+            return;
+        }
         if self.cursor_position < self.value.len() {
             self.value.remove(self.cursor_position);
         }
     }
 
     fn move_cursor_left(&mut self) {
+        self.selection = None;
         if self.cursor_position > 0 {
             self.cursor_position = self.value[..self.cursor_position]
                 .char_indices()
@@ -94,6 +127,7 @@ impl TextInput {
     }
 
     fn move_cursor_right(&mut self) {
+        self.selection = None;
         if self.cursor_position < self.value.len() {
             self.cursor_position = self.value[self.cursor_position..]
                 .char_indices()
@@ -104,10 +138,12 @@ impl TextInput {
     }
 
     fn move_cursor_home(&mut self) {
+        self.selection = None;
         self.cursor_position = 0;
     }
 
     fn move_cursor_end(&mut self) {
+        self.selection = None;
         self.cursor_position = self.value.len();
     }
 }
@@ -185,12 +221,22 @@ impl Field for TextInput {
 
         // Render the text
         let visible_text: String = display_text.chars().take(input_width as usize).collect();
+        let selection = self.selection.filter(|_| !self.value.is_empty());
+        let mut byte_idx = 0usize;
         for (i, c) in visible_text.chars().enumerate() {
             if input_x + i as u16 >= area.x + area.width {
                 break;
             }
+            let is_selected =
+                selection.is_some_and(|(start, end)| byte_idx >= start && byte_idx < end);
+            let char_style = if is_selected {
+                display_style.add_modifier(Modifier::REVERSED)
+            } else {
+                display_style
+            };
             buf[(input_x + i as u16, area.y)].set_char(c);
-            buf[(input_x + i as u16, area.y)].set_style(display_style);
+            buf[(input_x + i as u16, area.y)].set_style(char_style);
+            byte_idx += c.len_utf8();
         }
 
         // Render cursor if focused
@@ -217,6 +263,7 @@ impl Field for TextInput {
                         'u' => {
                             self.value.clear();
                             self.cursor_position = 0;
+                            self.selection = None;
                         }
                         _ => return false,
                     }
@@ -251,6 +298,15 @@ impl Field for TextInput {
             }
             _ => false,
         }
+    }
+
+    fn on_focus(&mut self) {
+        self.selection = Some((0, self.value.len()));
+        self.cursor_position = self.value.len();
+    }
+
+    fn on_blur(&mut self) {
+        self.selection = None;
     }
 
     fn validate(&self) -> Result<(), Vec<String>> {

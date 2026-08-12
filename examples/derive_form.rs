@@ -2,7 +2,7 @@
 //!
 //! Run with: `cargo run --example derive_form`
 
-use std::{io, net::Ipv4Addr};
+use std::{io, net::Ipv6Addr};
 
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
@@ -28,7 +28,7 @@ struct Signup {
     age: u8,
 
     #[form(label = "Ip address")]
-    ip: Ipv4Addr,
+    ip: Ipv6Addr,
 
     #[form(label = "Company")]
     company: Option<String>,
@@ -58,12 +58,12 @@ fn main() -> io::Result<()> {
         name: "Ada".into(),
         email: "ada@example.com".into(),
         age: 37,
-        ip: Ipv4Addr::new(192, 168, 0, 1),
+        ip: Ipv6Addr::new(192, 168, 0, 1, 4, 24, 2, 4),
         company: Some("Analytical Engine".into()),
         newsletter: true,
         id: 42,
     };
-    let mut form = Form<Signup>::from(prefill);
+    let mut form = Form::<Signup>::from(prefill);
 
     // Main loop. Output is captured and only printed once raw mode is off and
     // the alternate screen is left, otherwise it would be swallowed by the TUI.
