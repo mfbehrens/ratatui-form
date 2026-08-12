@@ -6,7 +6,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Padding, Widget};
 
-use crate::field::Field;
+use crate::field_base::BasicField;
 use crate::navigation::FocusManager;
 use crate::style::FormStyle;
 use crate::validation::ValidationError;
@@ -29,7 +29,7 @@ pub enum FormResult {
 /// `#[derive(FormModel)]`.
 pub(crate) struct FormEngine {
     title: String,
-    fields: Vec<Box<dyn Field>>,
+    fields: Vec<Box<dyn BasicField>>,
     focus_manager: FocusManager,
     last_focused: Option<usize>,
     style: FormStyle,
@@ -57,7 +57,7 @@ impl FormEngine {
     }
 
     /// Appends a field to the form.
-    pub(crate) fn push(&mut self, field: Box<dyn Field>) {
+    pub(crate) fn push(&mut self, field: Box<dyn BasicField>) {
         self.fields.push(field);
         self.focus_manager.set_field_count(self.fields.len());
     }

@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_form::{
-    Field, FieldSpec, Form, FormExtractError, FormModel, FormResult, FormValue, TextInput,
+    BasicField, FieldSpec, FormExtractError, FormModel, FormResult, FormValue, TextInput, TypedForm,
 };
 
 #[derive(FormModel, Debug, PartialEq)]
@@ -45,13 +45,13 @@ fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
-fn type_text<T: FormModel>(form: &mut Form<T>, text: &str) {
+fn type_text<T: FormModel>(form: &mut TypedForm<T>, text: &str) {
     for c in text.chars() {
         form.handle_input(key(KeyCode::Char(c)));
     }
 }
 
-fn tab<T: FormModel>(form: &mut Form<T>) {
+fn tab<T: FormModel>(form: &mut TypedForm<T>) {
     form.handle_input(key(KeyCode::Tab));
 }
 
@@ -69,7 +69,7 @@ fn round_trip_preserves_seeded_values() {
 
 #[test]
 fn into_conversion_from_model() {
-    let form: Form<Signup> = sample().into();
+    let form: TypedForm<Signup> = sample().into();
     let out = Signup::try_from(form).unwrap();
     assert_eq!(out.name, "Alice");
 }
@@ -247,11 +247,14 @@ fn ipv4_unparsable_fails_extraction() {
 struct Department(String);
 
 impl FormValue for Department {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn BasicField> {
         Box::new(TextInput::new(spec.label).initial_value(value.0.clone()))
     }
 
-    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
+    fn form_extract<M: FormModel>(
+        form: &TypedForm<M>,
+        index: usize,
+    ) -> Result<Self, FormExtractError> {
         let value = form.value_str(index).ok_or_else(|| FormExtractError {
             field_index: index,
             message: "field not found in form".to_string(),
@@ -301,11 +304,14 @@ fn custom_type_editing() {
 struct Port(u16);
 
 impl FormValue for Port {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn BasicField> {
         Box::new(TextInput::new(spec.label).initial_value(value.0.to_string()))
     }
 
-    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
+    fn form_extract<M: FormModel>(
+        form: &TypedForm<M>,
+        index: usize,
+    ) -> Result<Self, FormExtractError> {
         let value = form.value_str(index).ok_or_else(|| FormExtractError {
             field_index: index,
             message: "field not found in form".to_string(),

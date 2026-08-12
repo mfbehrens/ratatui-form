@@ -106,7 +106,7 @@
 //! # let _ = form;
 //! ```
 
-pub mod field;
+pub mod field_base;
 pub mod form;
 pub mod model;
 pub mod style;
@@ -115,7 +115,7 @@ pub mod validation;
 mod form_value;
 mod navigation;
 
-pub use field::{Checkbox, Field, Select, TextInput};
+pub use field_base::{BasicField, Checkbox, Select, TextInput};
 pub use form::FormResult;
 pub use form_value::{FieldSpec, FormValue};
 pub use model::{Form, FormExtractError, FormModel};

@@ -241,7 +241,7 @@ fn build_field(
     let required = attrs.required;
 
     Ok(quote! {
-        form.push(#krate::FormValue::form_field(
+        form.push(Box::new(#krate::FormValue::form_field(
             #krate::FieldSpec {
                 label: #label.to_string(),
                 placeholder: #placeholder,
@@ -249,7 +249,7 @@ fn build_field(
                 validators: ::std::vec![#(#validators),*],
             },
             &self.#field_ident,
-        ));
+        )));
     })
 }
 

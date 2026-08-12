@@ -18,7 +18,8 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use ratatui_form::{
-    Field, FieldSpec, Form, FormExtractError, FormModel, FormResult, FormValue, Select, TextInput,
+    BasicField, FieldSpec, Form, FormExtractError, FormModel, FormResult, FormValue, Select,
+    TextInput,
 };
 
 /// A custom numeric type backed by a text input.
@@ -26,12 +27,13 @@ use ratatui_form::{
 struct Port(u16);
 
 impl FormValue for Port {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+    type FieldType = TextInput;
+    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
         let mut input = TextInput::new(spec.label);
         if spec.required {
             input = input.required();
         }
-        Box::new(input.initial_value(value.0.to_string()))
+        input.initial_value(value.0.to_string())
     }
 
     fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
@@ -66,7 +68,8 @@ impl Region {
 }
 
 impl FormValue for Region {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+    type FieldType = Select;
+    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
         let mut select = Select::new(spec.label)
             .option("us-east", "US East (Virginia)")
             .option("us-west", "US West (Oregon)")
@@ -74,7 +77,7 @@ impl FormValue for Region {
         if spec.required {
             select = select.required();
         }
-        Box::new(select.initial_value(value.as_str()))
+        select.initial_value(value.as_str())
     }
 
     fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {

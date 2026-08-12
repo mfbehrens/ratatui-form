@@ -6,7 +6,7 @@ use crossterm::event::KeyEvent;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
-use crate::field::Field;
+use crate::field_base::BasicField;
 use crate::form::{FormEngine, FormResult};
 use crate::style::FormStyle;
 use crate::validation::ValidationError;
@@ -72,7 +72,7 @@ impl<T: FormModel> Form<T> {
     /// This is used by the `FormModel` derive and is not intended to be called
     /// directly.
     #[doc(hidden)]
-    pub fn push(&mut self, field: Box<dyn Field>) {
+    pub fn push(&mut self, field: Box<dyn BasicField>) {
         self.inner.push(field);
     }
 

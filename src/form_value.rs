@@ -1,6 +1,6 @@
 //! Mapping between model values and form fields.
 
-use crate::field::{Checkbox, Field, TextInput};
+use crate::field_base::{BasicField, Checkbox, TextInput};
 use crate::model::{Form, FormExtractError, FormModel};
 use crate::validation::{rules, Validator};
 
@@ -32,7 +32,7 @@ pub struct FieldSpec {
 /// struct Port(u16);
 ///
 /// impl FormValue for Port {
-///     fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn ratatui_form::Field> {
+///     fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn ratatui_form::BasicField> {
 ///         Box::new(TextInput::new(spec.label).initial_value(value.0.to_string()))
 ///     }
 ///
@@ -53,8 +53,11 @@ pub struct FieldSpec {
 /// }
 /// ```
 pub trait FormValue: Sized {
+    /// Type of the Form Field
+    type FieldType;
+
     /// Builds a form field widget seeded with `value`.
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field>;
+    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType;
 
     /// Extracts a value of this type from the form at `index`.
     fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError>;
@@ -90,8 +93,9 @@ fn missing_field(index: usize) -> FormExtractError {
 }
 
 impl FormValue for String {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
-        Box::new(text_input(spec, value.clone(), None))
+    type FieldType = TextInput;
+    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
+        text_input(spec, value.clone(), None)
     }
 
     fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
@@ -100,8 +104,9 @@ impl FormValue for String {
 }
 
 impl FormValue for Option<String> {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
-        Box::new(text_input(spec, value.clone().unwrap_or_default(), None))
+    type FieldType = TextInput;
+    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
+        text_input(spec, value.clone().unwrap_or_default(), None)
     }
 
     fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
@@ -114,12 +119,13 @@ impl FormValue for Option<String> {
 }
 
 impl FormValue for bool {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+    type FieldType = Checkbox;
+    fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
         let mut checkbox = Checkbox::new(spec.label);
         if spec.required {
             checkbox = checkbox.required();
         }
-        Box::new(checkbox.checked(*value))
+        checkbox.checked(*value)
     }
 
     fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
@@ -134,10 +140,11 @@ macro_rules! impl_numeric_form_value {
     ($($ty:ty),* $(,)?) => {
         $(
             impl FormValue for $ty {
-                fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+                type FieldType = TextInput;
+                fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
                     // Numeric fields have no meaningful empty value, so they
                     // are always required regardless of `spec.required`.
-                    Box::new(text_input(spec, value.to_string(), Some(Box::new(rules::Numeric))).required())
+                    text_input(spec, value.to_string(), Some(Box::new(rules::Numeric))).required()
                 }
 
                 fn form_extract<M: FormModel>(
@@ -161,10 +168,11 @@ macro_rules! impl_ip_form_value {
     ($($ty:ty => $rule:expr, $message:literal;)*) => {
         $(
             impl FormValue for $ty {
-                fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+                type FieldType = TextInput;
+                fn form_field(spec: FieldSpec, value: &Self) -> Self::FieldType {
                     // IP fields have no meaningful empty value, so they are
                     // always required regardless of `spec.required`.
-                    Box::new(text_input(spec, value.to_string(), Some(Box::new($rule))).required())
+                    text_input(spec, value.to_string(), Some(Box::new($rule))).required()
                 }
 
                 fn form_extract<M: FormModel>(
