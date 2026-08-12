@@ -70,9 +70,4 @@ impl FocusManager {
             self.submit_button_focused = false;
         }
     }
-
-    /// Focuses on the submit button.
-    pub fn focus_submit(&mut self) {
-        self.submit_button_focused = true;
-    }
 }

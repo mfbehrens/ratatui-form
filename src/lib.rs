@@ -2,7 +2,8 @@
 //!
 //! Typed TUI forms built on [Ratatui]. Define a struct, derive
 //! [`FormModel`], and get an interactive form whose edited values convert
-//! back into the struct.//!
+//! back into the struct.
+//!
 //! [Ratatui]: https://github.com/ratatui/ratatui
 //!
 //! ## Features
@@ -108,17 +109,16 @@
 pub mod field;
 pub mod form;
 pub mod model;
-pub mod navigation;
 pub mod style;
 pub mod validation;
 
 mod form_value;
+mod navigation;
 
 pub use field::{Checkbox, Field, Select, TextInput};
 pub use form::FormResult;
 pub use form_value::{FieldSpec, FormValue};
 pub use model::{Form, FormExtractError, FormModel};
-pub use navigation::FocusManager;
 pub use ratatui_form_derive::FormModel;
 pub use style::FormStyle;
 pub use validation::rules::{Email, Ipv4, Ipv6, MaxLength, MinLength, Numeric, Pattern, Required};

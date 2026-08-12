@@ -4,11 +4,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::Widget;
 use unicode_width::UnicodeWidthStr;
 
-use crate::field::Field;
+use crate::field::{fill_row, render_label, Field};
 use crate::style::FormStyle;
 use crate::validation::Validator;
 
@@ -149,10 +147,6 @@ impl TextInput {
 }
 
 impl Field for TextInput {
-    fn label(&self) -> &str {
-        &self.label
-    }
-
     fn value_str(&self) -> String {
         self.value.clone()
     }
@@ -166,30 +160,10 @@ impl Field for TextInput {
             return;
         }
 
-        // Render label
-        let label_style = if focused {
-            style.label_focused
-        } else {
-            style.label
-        };
-
-        let required_marker = if self.required { "*" } else { "" };
-        let label_text = format!("{}{}: ", self.label, required_marker);
-        let label_width = label_text.width().min(area.width as usize);
-
-        let label_span = Span::styled(&label_text, label_style);
-        let label_line = Line::from(label_span);
-        let label_area = Rect {
-            x: area.x,
-            y: area.y,
-            width: label_width as u16,
-            height: 1,
-        };
-        label_line.render(label_area, buf);
-
-        // Calculate input area
-        let input_x = area.x + label_width as u16;
-        let input_width = area.width.saturating_sub(label_width as u16);
+        // Render label and compute the input area
+        let input_area = render_label(buf, area, &self.label, self.required, focused, style);
+        let input_x = input_area.x;
+        let input_width = input_area.width;
 
         if input_width == 0 {
             return;
@@ -214,10 +188,7 @@ impl Field for TextInput {
         };
 
         // Fill input area with background
-        for x in input_x..input_x + input_width {
-            buf[(x, area.y)].set_style(input_bg_style);
-            buf[(x, area.y)].set_char(' ');
-        }
+        fill_row(buf, input_area, input_bg_style);
 
         // Render the text
         let visible_text: String = display_text.chars().take(input_width as usize).collect();
@@ -329,9 +300,5 @@ impl Field for TextInput {
         } else {
             Err(errors)
         }
-    }
-
-    fn is_required(&self) -> bool {
-        self.required
     }
 }

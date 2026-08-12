@@ -45,10 +45,6 @@ impl Checkbox {
 }
 
 impl Field for Checkbox {
-    fn label(&self) -> &str {
-        &self.label
-    }
-
     fn value_str(&self) -> String {
         if self.checked {
             "true".to_string()
@@ -122,9 +118,5 @@ impl Field for Checkbox {
         } else {
             Ok(())
         }
-    }
-
-    fn is_required(&self) -> bool {
-        self.required
     }
 }

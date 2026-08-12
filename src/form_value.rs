@@ -60,39 +60,48 @@ pub trait FormValue: Sized {
     fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError>;
 }
 
+/// Builds a text input from a spec, seeded with `value`.
+///
+/// `rule` is an optional type-specific validator (e.g. `Numeric`); it is
+/// applied before any validators supplied in the spec.
+fn text_input(spec: FieldSpec, value: String, rule: Option<Box<dyn Validator>>) -> TextInput {
+    let mut input = TextInput::new(spec.label);
+    if let Some(placeholder) = spec.placeholder {
+        input = input.placeholder(placeholder);
+    }
+    if spec.required {
+        input = input.required();
+    }
+    if let Some(rule) = rule {
+        input = input.validator(rule);
+    }
+    for validator in spec.validators {
+        input = input.validator(validator);
+    }
+    input.initial_value(value)
+}
+
+/// The error returned when a field index is out of bounds.
+fn missing_field(index: usize) -> FormExtractError {
+    FormExtractError {
+        field_index: index,
+        message: "field not found in form".to_string(),
+    }
+}
+
 impl FormValue for String {
     fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
-        let mut input = TextInput::new(spec.label);
-        if let Some(placeholder) = spec.placeholder {
-            input = input.placeholder(placeholder);
-        }
-        if spec.required {
-            input = input.required();
-        }
-        for validator in spec.validators {
-            input = input.validator(validator);
-        }
-        Box::new(input.initial_value(value.clone()))
+        Box::new(text_input(spec, value.clone(), None))
     }
 
     fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
-        form.value_str(index).ok_or_else(|| FormExtractError {
-            field_index: index,
-            message: "field not found in form".to_string(),
-        })
+        form.value_str(index).ok_or_else(|| missing_field(index))
     }
 }
 
 impl FormValue for Option<String> {
     fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
-        let mut input = TextInput::new(spec.label);
-        if let Some(placeholder) = spec.placeholder {
-            input = input.placeholder(placeholder);
-        }
-        for validator in spec.validators {
-            input = input.validator(validator);
-        }
-        Box::new(input.initial_value(value.clone().unwrap_or_default()))
+        Box::new(text_input(spec, value.clone().unwrap_or_default(), None))
     }
 
     fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
@@ -126,25 +135,16 @@ macro_rules! impl_numeric_form_value {
         $(
             impl FormValue for $ty {
                 fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
-                    let mut input = TextInput::new(spec.label);
-                    if let Some(placeholder) = spec.placeholder {
-                        input = input.placeholder(placeholder);
-                    }
-                    input = input.required().validator(Box::new(rules::Numeric));
-                    for validator in spec.validators {
-                        input = input.validator(validator);
-                    }
-                    Box::new(input.initial_value(value.to_string()))
+                    // Numeric fields have no meaningful empty value, so they
+                    // are always required regardless of `spec.required`.
+                    Box::new(text_input(spec, value.to_string(), Some(Box::new(rules::Numeric))).required())
                 }
 
                 fn form_extract<M: FormModel>(
                     form: &Form<M>,
                     index: usize,
                 ) -> Result<Self, FormExtractError> {
-                    let raw = form.value_str(index).ok_or_else(|| FormExtractError {
-                        field_index: index,
-                        message: "field not found in form".to_string(),
-                    })?;
+                    let raw = form.value_str(index).ok_or_else(|| missing_field(index))?;
                     raw.parse::<Self>().map_err(|_| FormExtractError {
                         field_index: index,
                         message: "expected a number".to_string(),
@@ -157,52 +157,32 @@ macro_rules! impl_numeric_form_value {
 
 impl_numeric_form_value!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64,);
 
-impl FormValue for std::net::Ipv4Addr {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
-        let mut input = TextInput::new(spec.label);
-        if let Some(placeholder) = spec.placeholder {
-            input = input.placeholder(placeholder);
-        }
-        input = input.required().validator(Box::new(rules::Ipv4));
-        for validator in spec.validators {
-            input = input.validator(validator);
-        }
-        Box::new(input.initial_value(value.to_string()))
-    }
+macro_rules! impl_ip_form_value {
+    ($($ty:ty => $rule:expr, $message:literal;)*) => {
+        $(
+            impl FormValue for $ty {
+                fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
+                    // IP fields have no meaningful empty value, so they are
+                    // always required regardless of `spec.required`.
+                    Box::new(text_input(spec, value.to_string(), Some(Box::new($rule))).required())
+                }
 
-    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
-        let raw = form.value_str(index).ok_or_else(|| FormExtractError {
-            field_index: index,
-            message: "field not found in form".to_string(),
-        })?;
-        raw.parse::<Self>().map_err(|_| FormExtractError {
-            field_index: index,
-            message: "expected an IPv4 address".to_string(),
-        })
-    }
+                fn form_extract<M: FormModel>(
+                    form: &Form<M>,
+                    index: usize,
+                ) -> Result<Self, FormExtractError> {
+                    let raw = form.value_str(index).ok_or_else(|| missing_field(index))?;
+                    raw.parse::<Self>().map_err(|_| FormExtractError {
+                        field_index: index,
+                        message: $message.to_string(),
+                    })
+                }
+            }
+        )*
+    };
 }
 
-impl FormValue for std::net::Ipv6Addr {
-    fn form_field(spec: FieldSpec, value: &Self) -> Box<dyn Field> {
-        let mut input = TextInput::new(spec.label);
-        if let Some(placeholder) = spec.placeholder {
-            input = input.placeholder(placeholder);
-        }
-        input = input.required().validator(Box::new(rules::Ipv6));
-        for validator in spec.validators {
-            input = input.validator(validator);
-        }
-        Box::new(input.initial_value(value.to_string()))
-    }
-
-    fn form_extract<M: FormModel>(form: &Form<M>, index: usize) -> Result<Self, FormExtractError> {
-        let raw = form.value_str(index).ok_or_else(|| FormExtractError {
-            field_index: index,
-            message: "field not found in form".to_string(),
-        })?;
-        raw.parse::<Self>().map_err(|_| FormExtractError {
-            field_index: index,
-            message: "expected an IPv6 address".to_string(),
-        })
-    }
-}
+impl_ip_form_value!(
+    std::net::Ipv4Addr => rules::Ipv4, "expected an IPv4 address";
+    std::net::Ipv6Addr => rules::Ipv6, "expected an IPv6 address";
+);

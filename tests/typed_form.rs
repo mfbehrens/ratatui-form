@@ -358,3 +358,28 @@ fn custom_type_replaces_seeded_value_on_focus() {
     let out = Server::try_from(form).unwrap();
     assert_eq!(out.port, Port(9000));
 }
+
+#[derive(FormModel, Debug, PartialEq)]
+struct Profile {
+    username: String,
+
+    #[form(label = "Company", required)]
+    company: Option<String>,
+}
+
+#[test]
+fn required_optional_field_blocks_submit() {
+    let model = Profile {
+        username: "ada".into(),
+        company: Some(String::new()),
+    };
+    let mut form = model.get_form();
+
+    // Tab past both fields to the submit button.
+    tab(&mut form); // company
+    tab(&mut form); // submit button
+    form.handle_input(key(KeyCode::Enter));
+
+    assert_eq!(form.result(), &FormResult::Active);
+    assert!(!form.validation_errors().is_empty());
+}

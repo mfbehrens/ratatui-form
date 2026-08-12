@@ -4,11 +4,8 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::Widget;
-use unicode_width::UnicodeWidthStr;
 
-use crate::field::Field;
+use crate::field::{fill_row, render_label, Field};
 use crate::style::FormStyle;
 
 /// A select/dropdown field.
@@ -37,14 +34,6 @@ impl Select {
     /// Adds an option to the select.
     pub fn option(mut self, value: impl Into<String>, display: impl Into<String>) -> Self {
         self.options.push((value.into(), display.into()));
-        self
-    }
-
-    /// Adds multiple options at once.
-    pub fn options(mut self, options: Vec<(impl Into<String>, impl Into<String>)>) -> Self {
-        for (value, display) in options {
-            self.options.push((value.into(), display.into()));
-        }
         self
     }
 
@@ -96,10 +85,6 @@ impl Select {
 }
 
 impl Field for Select {
-    fn label(&self) -> &str {
-        &self.label
-    }
-
     fn value_str(&self) -> String {
         self.selected_index
             .and_then(|i| self.options.get(i))
@@ -116,30 +101,10 @@ impl Field for Select {
             return;
         }
 
-        // Render label
-        let label_style = if focused {
-            style.label_focused
-        } else {
-            style.label
-        };
-
-        let required_marker = if self.required { "*" } else { "" };
-        let label_text = format!("{}{}: ", self.label, required_marker);
-        let label_width = label_text.width().min(area.width as usize);
-
-        let label_span = Span::styled(&label_text, label_style);
-        let label_line = Line::from(label_span);
-        let label_area = Rect {
-            x: area.x,
-            y: area.y,
-            width: label_width as u16,
-            height: 1,
-        };
-        label_line.render(label_area, buf);
-
-        // Calculate input area
-        let input_x = area.x + label_width as u16;
-        let input_width = area.width.saturating_sub(label_width as u16);
+        // Render label and compute the input area
+        let input_area = render_label(buf, area, &self.label, self.required, focused, style);
+        let input_x = input_area.x;
+        let input_width = input_area.width;
 
         if input_width == 0 {
             return;
@@ -160,10 +125,7 @@ impl Field for Select {
         };
 
         // Fill input area with background
-        for x in input_x..input_x + input_width {
-            buf[(x, area.y)].set_style(input_style);
-            buf[(x, area.y)].set_char(' ');
-        }
+        fill_row(buf, input_area, input_style);
 
         // Render selected text
         let arrow = if self.is_open { " ▲" } else { " ▼" };
@@ -274,9 +236,5 @@ impl Field for Select {
         } else {
             1
         }
-    }
-
-    fn is_required(&self) -> bool {
-        self.required
     }
 }

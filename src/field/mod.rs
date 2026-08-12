@@ -11,14 +11,59 @@ pub use text::TextInput;
 use crossterm::event::KeyEvent;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::Widget;
+use unicode_width::UnicodeWidthStr;
 
 use crate::style::FormStyle;
 
+/// Renders a field label ("<label>[required]: ") and returns the area left
+/// over for the input widget itself.
+pub(crate) fn render_label(
+    buf: &mut Buffer,
+    area: Rect,
+    label: &str,
+    required: bool,
+    focused: bool,
+    style: &FormStyle,
+) -> Rect {
+    let label_style = if focused {
+        style.label_focused
+    } else {
+        style.label
+    };
+    let required_marker = if required { "*" } else { "" };
+    let label_text = format!("{label}{required_marker}: ");
+    let label_width = label_text.width().min(area.width as usize);
+
+    Line::from(Span::styled(&label_text, label_style)).render(
+        Rect {
+            x: area.x,
+            y: area.y,
+            width: label_width as u16,
+            height: 1,
+        },
+        buf,
+    );
+
+    Rect {
+        x: area.x + label_width as u16,
+        y: area.y,
+        width: area.width.saturating_sub(label_width as u16),
+        height: area.height,
+    }
+}
+
+/// Fills a row with a background style.
+pub(crate) fn fill_row(buf: &mut Buffer, area: Rect, style: ratatui::style::Style) {
+    for x in area.x..area.x + area.width {
+        buf[(x, area.y)].set_style(style);
+        buf[(x, area.y)].set_char(' ');
+    }
+}
+
 /// Trait for form fields.
 pub trait Field: Send + Sync {
-    /// Returns the display label for this field.
-    fn label(&self) -> &str;
-
     /// Returns the current value of the field as a string.
     fn value_str(&self) -> String;
 
@@ -43,10 +88,5 @@ pub trait Field: Send + Sync {
     /// Returns the height needed to render this field.
     fn height(&self) -> u16 {
         1
-    }
-
-    /// Returns whether this field is required.
-    fn is_required(&self) -> bool {
-        false
     }
 }

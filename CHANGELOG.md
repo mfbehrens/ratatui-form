@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-generated labels now uppercase short initialisms in field names
   (`ip` → `IP`, `api_key` → `API KEY`).
 - README rewritten to document the derive-based API and custom field types.
+- Removed the stale VHS demo tape, demo GIF, and leftover `signup.json`.
+- Removed unused public API: `Field::label`, `Field::is_required`,
+  `Select::options`, `FocusManager::focus_submit` (and the `navigation`
+  module is now private). `FormEngine` is no longer public.
+- Fixed `#[form(required)]` being silently ignored on `Option<String>` fields.
 
 ## [0.1.1] - 2025-01-31
 

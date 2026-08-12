@@ -27,7 +27,7 @@ pub enum FormResult {
 /// Fields are stored in a plain list; the index in that list is the field's
 /// id. Construct a form through [`Form`](crate::Form), usually via
 /// `#[derive(FormModel)]`.
-pub struct FormEngine {
+pub(crate) struct FormEngine {
     title: String,
     fields: Vec<Box<dyn Field>>,
     focus_manager: FocusManager,
@@ -39,7 +39,7 @@ pub struct FormEngine {
 
 impl FormEngine {
     /// Creates a new, empty form with the given title.
-    pub fn new(title: impl Into<String>) -> Self {
+    pub(crate) fn new(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),
             fields: Vec::new(),
@@ -52,48 +52,43 @@ impl FormEngine {
     }
 
     /// Sets the form style.
-    pub fn set_style(&mut self, style: FormStyle) {
+    pub(crate) fn set_style(&mut self, style: FormStyle) {
         self.style = style;
     }
 
     /// Appends a field to the form.
-    pub fn push(&mut self, field: Box<dyn Field>) {
+    pub(crate) fn push(&mut self, field: Box<dyn Field>) {
         self.fields.push(field);
         self.focus_manager.set_field_count(self.fields.len());
     }
 
-    /// Returns the number of fields in the form.
-    pub fn field_count(&self) -> usize {
-        self.fields.len()
-    }
-
     /// Returns the raw string value of the field at `index`, if any.
-    pub fn value_str(&self, index: usize) -> Option<String> {
+    pub(crate) fn value_str(&self, index: usize) -> Option<String> {
         self.fields.get(index).map(|field| field.value_str())
     }
 
     /// Returns the boolean value of the field at `index`, if it is one.
-    pub fn value_bool(&self, index: usize) -> Option<bool> {
+    pub(crate) fn value_bool(&self, index: usize) -> Option<bool> {
         self.fields.get(index).and_then(|field| field.value_bool())
     }
 
     /// Returns the current form result.
-    pub fn result(&self) -> &FormResult {
+    pub(crate) fn result(&self) -> &FormResult {
         &self.result
     }
 
     /// Returns whether the form is still active.
-    pub fn is_active(&self) -> bool {
+    pub(crate) fn is_active(&self) -> bool {
         self.result == FormResult::Active
     }
 
     /// Returns validation errors from the last submit attempt.
-    pub fn validation_errors(&self) -> &[ValidationError] {
+    pub(crate) fn validation_errors(&self) -> &[ValidationError] {
         &self.validation_errors
     }
 
     /// Handles keyboard input.
-    pub fn handle_input(&mut self, event: KeyEvent) {
+    pub(crate) fn handle_input(&mut self, event: KeyEvent) {
         // Handle global keys
         match event.code {
             KeyCode::Esc => {
@@ -196,7 +191,7 @@ impl FormEngine {
     }
 
     /// Renders the form to a buffer.
-    pub fn render(&self, area: Rect, buf: &mut Buffer) {
+    pub(crate) fn render(&self, area: Rect, buf: &mut Buffer) {
         // Create the outer block with border
         let border_style = if self.focus_manager.is_submit_focused() {
             self.style.border

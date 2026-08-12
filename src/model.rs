@@ -41,8 +41,8 @@ pub trait FormModel: Sized {
 
 /// A form tied to a model type `T`.
 ///
-/// `Form<T>` wraps a [`FormEngine`] and carries the model type, so the edited
-/// values can be converted back into a `T` with `T::try_from(form)`.
+/// `Form<T>` wraps the internal form engine and carries the model type, so the
+/// edited values can be converted back into a `T` with `T::try_from(form)`.
 pub struct Form<T: FormModel> {
     inner: FormEngine,
     marker: PhantomData<T>,

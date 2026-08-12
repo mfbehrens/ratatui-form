@@ -16,7 +16,6 @@ use ratatui_form::{Form, FormModel, FormResult};
 /// `#[form(skip)]` fields are excluded from the form.
 #[derive(Debug, FormModel)]
 #[form(title = "Sign Up")]
-#[allow(dead_code)] // `id` is skipped from the form on purpose
 struct Signup {
     #[form(label = "Full Name", required, placeholder = "Ada Lovelace")]
     name: String,
@@ -37,6 +36,7 @@ struct Signup {
     newsletter: bool,
 
     #[form(skip)]
+    #[allow(dead_code)] // skipped from the form; never read individually
     id: u64,
 }
 

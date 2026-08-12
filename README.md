@@ -8,8 +8,6 @@ Typed TUI forms built on [Ratatui](https://github.com/ratatui/ratatui). Define
 a struct, derive `FormModel`, and get an interactive form whose edited values
 convert back into the struct — no manual field wiring.
 
-![demo](demo.gif)
-
 > **Note:** This crate was originally developed under the name `tform`, but was
 > renamed to `ratatui-form` to avoid confusion with the unrelated
 > [tform](https://crates.io/crates/tform) crate. If you were using the old
