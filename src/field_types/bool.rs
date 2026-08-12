@@ -12,6 +12,6 @@ impl FieldType for bool {
     }
 
     fn form_extract(field: &Self::BaseFieldType) -> Result<Self, String> {
-        Ok(field.is_checked())
+        Ok(field.value())
     }
 }

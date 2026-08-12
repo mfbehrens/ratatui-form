@@ -29,6 +29,13 @@ pub trait FormFields {
 
     /// Returns immutable references to all form fields in tab/display order.
     fn fields(&self) -> Vec<&dyn BasicFieldType>;
+
+    /// Returns the amount of fields contained in the struct.
+    ///
+    /// Will be overwritten by the derived implementation with the numeric value.
+    fn len_fields(&self) -> usize {
+        self.fields().len()
+    }
 }
 
 /// A form holding a strongly-typed fields container `F`.
@@ -49,7 +56,7 @@ pub struct Form<F: FormFields> {
 impl<F: FormFields> Form<F> {
     /// Creates a new typed form with the given title and fields container.
     pub fn new(title: impl Into<String>, fields: F) -> Self {
-        let field_count = fields.fields().len();
+        let field_count = fields.len_fields();
         Self {
             fields,
             title: title.into(),

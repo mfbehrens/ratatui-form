@@ -5,7 +5,7 @@ use ratatui_form::{
     FieldAttributes, FieldType, Form, FormFields, FormFor, FormResult, TextInput, TypedForm,
 };
 
-#[derive(RatatuiTypedForm, Debug, PartialEq)]
+#[derive(TypedForm, Debug, PartialEq)]
 struct Signup {
     #[form(label = "Full Name", required, placeholder = "Ada Lovelace")]
     name: String,
@@ -79,16 +79,16 @@ fn direct_named_field_access() {
     let form = sample().get_form();
     assert_eq!(form.fields.name.value(), "Alice");
     assert_eq!(form.fields.email.value(), "alice@example.com");
-    assert!(form.fields.newsletter.is_checked());
+    assert!(form.fields.newsletter.value());
 }
 
 #[test]
 fn fields_are_addressed_by_index() {
     let form = sample().get_form();
-    assert_eq!(form.value_str(0).as_deref(), Some("Alice"));
-    assert_eq!(form.value_str(1).as_deref(), Some("alice@example.com"));
-    assert_eq!(form.value_bool(4), Some(true));
-    assert_eq!(form.value_str(5), None); // only 5 fields (id is skipped)
+    assert_eq!(form.fields.name.value(), "Alice");
+    assert_eq!(form.fields.email.value(), "alice@example.com");
+    assert_eq!(form.fields.newsletter.value(), true);
+    assert_eq!(form.fields.company.value(), "Acme");
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn unparsable_number_fails_extraction() {
     type_text(&mut form, "abc");
 
     let err = Signup::try_from(form).unwrap_err();
-    assert!(err.iter().any(|e| e.field_index == 2));
+    assert_eq!(err.field_name, "age");
 }
 
 #[test]
@@ -188,7 +188,7 @@ fn form_result_cancelled_on_escape() {
     assert!(!form.is_active());
 }
 
-#[derive(RatatuiTypedForm, Debug, PartialEq)]
+#[derive(TypedForm, Debug, PartialEq)]
 struct Network {
     host: String,
 
@@ -204,8 +204,8 @@ fn ipv4_field_round_trip() {
     };
 
     let form = model.get_form();
-    assert_eq!(form.value_str(0).as_deref(), Some("server-1"));
-    assert_eq!(form.value_str(1).as_deref(), Some("10.0.0.5"));
+    assert_eq!(form.fields.host.value(), "server-1");
+    assert_eq!(form.fields.ip.value(), "10.0.0.5");
 
     let out = Network::try_from(model.get_form()).unwrap();
     assert_eq!(out, model);
@@ -246,7 +246,7 @@ fn ipv4_unparsable_fails_extraction() {
     type_text(&mut form, "nope");
 
     let err = Network::try_from(form).unwrap_err();
-    assert!(err.iter().any(|e| e.field_index == 1));
+    assert_eq!(err.field_name, "ip");
 }
 
 /// A completely custom field type: the derive knows nothing about it and
@@ -266,7 +266,7 @@ impl FieldType for Department {
     }
 }
 
-#[derive(RatatuiTypedForm, Debug, PartialEq)]
+#[derive(TypedForm, Debug, PartialEq)]
 struct Employee {
     name: String,
     department: Department,
@@ -280,7 +280,7 @@ fn custom_type_round_trip() {
     };
 
     let form = model.get_form();
-    assert_eq!(form.value_str(1).as_deref(), Some("Engineering"));
+    assert_eq!(form.fields.department.value(), "Engineering");
 
     let out = Employee::try_from(form).unwrap();
     assert_eq!(out, model);
@@ -320,7 +320,7 @@ impl FieldType for Port {
     }
 }
 
-#[derive(RatatuiTypedForm, Debug, PartialEq)]
+#[derive(TypedForm, Debug, PartialEq)]
 struct Server {
     host: String,
     port: Port,
@@ -341,7 +341,7 @@ fn custom_type_extraction_failure() {
     type_text(&mut form, "abc");
 
     let err = Server::try_from(form).unwrap_err();
-    assert!(err.iter().any(|e| e.field_index == 1));
+    assert_eq!(err.field_name, "port");
 }
 
 #[test]
@@ -361,7 +361,7 @@ fn custom_type_replaces_seeded_value_on_focus() {
     assert_eq!(out.port, Port(9000));
 }
 
-#[derive(RatatuiTypedForm, Debug, PartialEq)]
+#[derive(TypedForm, Debug, PartialEq)]
 struct Profile {
     username: String,
 

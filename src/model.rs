@@ -5,8 +5,6 @@ pub use crate::form::{Form, FormFields};
 /// An error produced while extracting a model from a [`Form`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FormExtractError {
-    /// The index of the field that failed.
-    pub field_index: usize,
     /// The name of the field that failed (if available).
     pub field_name: String,
     /// A description of the failure.
@@ -15,13 +13,8 @@ pub struct FormExtractError {
 
 impl FormExtractError {
     /// Creates a new extraction error.
-    pub fn new(
-        field_index: usize,
-        field_name: impl Into<String>,
-        message: impl Into<String>,
-    ) -> Self {
+    pub fn new(field_name: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
-            field_index,
             field_name: field_name.into(),
             message: message.into(),
         }
@@ -30,15 +23,7 @@ impl FormExtractError {
 
 impl std::fmt::Display for FormExtractError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.field_name.is_empty() {
-            write!(f, "field {}: {}", self.field_index, self.message)
-        } else {
-            write!(
-                f,
-                "field {} ({}): {}",
-                self.field_index, self.field_name, self.message
-            )
-        }
+        write!(f, "field {}: {}", self.field_name, self.message)
     }
 }
 

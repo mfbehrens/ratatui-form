@@ -18,7 +18,7 @@
 //! ## Quick start
 //!
 //! ```no_run
-//! use ratatui_form::{TypedForm, FormModel};
+//! use ratatui_form::{TypedForm};
 //!
 //! #[derive(TypedForm)]
 //! #[form(title = "Sign Up")]

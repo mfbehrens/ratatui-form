@@ -40,7 +40,7 @@ impl Checkbox {
     }
 
     /// Returns whether the checkbox is checked.
-    pub fn is_checked(&self) -> bool {
+    pub fn value(&self) -> bool {
         self.checked
     }
 

@@ -77,7 +77,6 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut field_inits: Vec<TokenStream2> = Vec::new();
     let mut extractions: Vec<TokenStream2> = Vec::new();
     let mut assignments: Vec<TokenStream2> = Vec::new();
-    let mut index = 0usize;
 
     for field in fields {
         let Some(fident) = &field.ident else {
@@ -104,23 +103,21 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
             );
 
             let fname_str = fident.to_string();
-            let idx_lit = syn::Index::from(index);
 
             extractions.push(quote! {
                 let #fident = match <#ty as #krate::FieldType>::form_extract(&form.fields.#fident) {
-                    Ok(value) => ::core::option::Option::Some(value),
+                    Ok(value) => value,
                     Err(msg) => {
-                        errors.push(#krate::FormExtractError::new(#idx_lit, #fname_str, msg));
-                        ::core::option::Option::None
+                        return ::std::result::Result::Err(#krate::FormExtractError::new(#fname_str, msg));
                     }
                 };
             });
 
-            assignments.push(quote!(#fident: #fident.unwrap()));
-            index += 1;
+            assignments.push(quote!(#fident: #fident));
         }
     }
 
+    let len_fields = mut_refs.len();
     let form_fields_mod = quote! {
         #[allow(non_snake_case)]
         pub mod #mod_ident {
@@ -137,6 +134,10 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
                 fn fields(&self) -> ::std::vec::Vec<&dyn #krate::BasicFieldType> {
                     ::std::vec![#(#immut_refs),*]
+                }
+
+                fn len_fields(&self) -> usize {
+                    #len_fields
                 }
             }
         }
@@ -157,16 +158,10 @@ fn impl_form_model(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let try_from_impl = quote! {
         impl ::std::convert::TryFrom<#krate::Form<#mod_ident::Fields>> for #ident {
-            type Error = ::std::vec::Vec<#krate::FormExtractError>;
+            type Error = #krate::FormExtractError;
 
             fn try_from(form: #krate::Form<#mod_ident::Fields>) -> Result<Self, Self::Error> {
-                let mut errors = ::std::vec::Vec::new();
-
                 #(#extractions)*
-
-                if !errors.is_empty() {
-                    return Err(errors);
-                }
 
                 Ok(Self {
                     #(#assignments,)*
