@@ -6,16 +6,13 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
-use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
 
 use crate::field::Field;
 use crate::style::FormStyle;
-use crate::validation::ValidationError;
 
 /// A select/dropdown field.
 pub struct Select {
-    id: String,
     label: String,
     options: Vec<(String, String)>, // (value, display)
     selected_index: Option<usize>,
@@ -26,9 +23,8 @@ pub struct Select {
 
 impl Select {
     /// Creates a new select field.
-    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+    pub fn new(label: impl Into<String>) -> Self {
         Self {
-            id: id.into(),
             label: label.into(),
             options: Vec::new(),
             selected_index: None,
@@ -100,12 +96,19 @@ impl Select {
 }
 
 impl Field for Select {
-    fn id(&self) -> &str {
-        &self.id
-    }
-
     fn label(&self) -> &str {
         &self.label
+    }
+
+    fn value_str(&self) -> String {
+        self.selected_index
+            .and_then(|i| self.options.get(i))
+            .map(|(v, _)| v.clone())
+            .unwrap_or_default()
+    }
+
+    fn value_bool(&self) -> Option<bool> {
+        None
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer, focused: bool, style: &FormStyle) {
@@ -257,19 +260,9 @@ impl Field for Select {
         }
     }
 
-    fn value(&self) -> Value {
-        self.selected_index
-            .and_then(|i| self.options.get(i))
-            .map(|(v, _)| Value::String(v.clone()))
-            .unwrap_or(Value::Null)
-    }
-
-    fn validate(&self) -> Result<(), Vec<ValidationError>> {
+    fn validate(&self) -> Result<(), Vec<String>> {
         if self.required && self.selected_index.is_none() {
-            Err(vec![ValidationError {
-                field_id: self.id.clone(),
-                message: format!("{} is required", self.label),
-            }])
+            Err(vec![format!("{} is required", self.label)])
         } else {
             Ok(())
         }

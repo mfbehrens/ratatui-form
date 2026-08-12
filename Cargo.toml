@@ -3,28 +3,19 @@ name = "ratatui-form"
 version = "0.1.1"
 edition = "2021"
 license = "MIT"
-description = "A Rust TUI form builder crate built on Ratatui"
+description = "Typed TUI forms for Ratatui, generated from structs with #[derive(FormModel)]"
 repository = "https://github.com/DavidLiedle/ratatui-form"
 documentation = "https://docs.rs/ratatui-form"
 keywords = ["tui", "terminal", "form", "ratatui", "cli"]
 categories = ["command-line-interface"]
 
+[workspace]
+members = ["ratatui-form-derive"]
+resolver = "2"
+
 [dependencies]
 ratatui = "0.29"
 crossterm = "0.28"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
 unicode-width = "0.2"
 regex = "1.10"
-
-[[example]]
-name = "address_form"
-path = "examples/address_form.rs"
-
-[[example]]
-name = "login_form"
-path = "examples/login_form.rs"
-
-[[example]]
-name = "survey_form"
-path = "examples/survey_form.rs"
+ratatui-form-derive = { version = "0.1", path = "ratatui-form-derive" }

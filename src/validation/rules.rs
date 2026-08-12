@@ -79,6 +79,40 @@ impl Validator for MaxLength {
     }
 }
 
+/// Validates that a value parses as a number.
+pub struct Numeric;
+
+impl Validator for Numeric {
+    fn validate(&self, value: &str) -> Result<(), String> {
+        if value.is_empty() {
+            return Ok(()); // Empty is OK, use Required for that
+        }
+
+        if value.parse::<f64>().is_ok() {
+            Ok(())
+        } else {
+            Err("Must be a number".to_string())
+        }
+    }
+}
+
+/// Validates that a value is a valid IPv4 address.
+pub struct Ipv4;
+
+impl Validator for Ipv4 {
+    fn validate(&self, value: &str) -> Result<(), String> {
+        if value.is_empty() {
+            return Ok(()); // Empty is OK, use Required for that
+        }
+
+        if value.parse::<std::net::Ipv4Addr>().is_ok() {
+            Ok(())
+        } else {
+            Err("Invalid IPv4 address".to_string())
+        }
+    }
+}
+
 /// Validates against a regex pattern.
 pub struct Pattern {
     regex: regex::Regex,

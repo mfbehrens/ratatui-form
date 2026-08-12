@@ -6,37 +6,32 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
-use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
 
 use crate::field::Field;
 use crate::style::FormStyle;
-use crate::validation::{ValidationError, Validator};
+use crate::validation::Validator;
 
 /// A single-line text input field.
 pub struct TextInput {
-    id: String,
     label: String,
     value: String,
     cursor_position: usize,
     placeholder: Option<String>,
     required: bool,
     validators: Vec<Box<dyn Validator>>,
-    validation_errors: Vec<ValidationError>,
 }
 
 impl TextInput {
     /// Creates a new text input field.
-    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+    pub fn new(label: impl Into<String>) -> Self {
         Self {
-            id: id.into(),
             label: label.into(),
             value: String::new(),
             cursor_position: 0,
             placeholder: None,
             required: false,
             validators: Vec::new(),
-            validation_errors: Vec::new(),
         }
     }
 
@@ -118,12 +113,16 @@ impl TextInput {
 }
 
 impl Field for TextInput {
-    fn id(&self) -> &str {
-        &self.id
-    }
-
     fn label(&self) -> &str {
         &self.label
+    }
+
+    fn value_str(&self) -> String {
+        self.value.clone()
+    }
+
+    fn value_bool(&self) -> Option<bool> {
+        None
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer, focused: bool, style: &FormStyle) {
@@ -206,20 +205,6 @@ impl Field for TextInput {
                 );
             }
         }
-
-        // Render validation errors if any
-        if !self.validation_errors.is_empty() && area.height > 1 {
-            let error_msg = &self.validation_errors[0].message;
-            let error_span = Span::styled(error_msg, style.error);
-            let error_line = Line::from(error_span);
-            let error_area = Rect {
-                x: input_x,
-                y: area.y + 1,
-                width: input_width,
-                height: 1,
-            };
-            error_line.render(error_area, buf);
-        }
     }
 
     fn handle_input(&mut self, event: &KeyEvent) -> bool {
@@ -268,28 +253,18 @@ impl Field for TextInput {
         }
     }
 
-    fn value(&self) -> Value {
-        Value::String(self.value.clone())
-    }
-
-    fn validate(&self) -> Result<(), Vec<ValidationError>> {
+    fn validate(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
         // Check required
         if self.required && self.value.trim().is_empty() {
-            errors.push(ValidationError {
-                field_id: self.id.clone(),
-                message: format!("{} is required", self.label),
-            });
+            errors.push(format!("{} is required", self.label));
         }
 
         // Run validators
         for validator in &self.validators {
             if let Err(msg) = validator.validate(&self.value) {
-                errors.push(ValidationError {
-                    field_id: self.id.clone(),
-                    message: msg,
-                });
+                errors.push(msg);
             }
         }
 
@@ -297,14 +272,6 @@ impl Field for TextInput {
             Ok(())
         } else {
             Err(errors)
-        }
-    }
-
-    fn height(&self) -> u16 {
-        if self.validation_errors.is_empty() {
-            1
-        } else {
-            2
         }
     }
 

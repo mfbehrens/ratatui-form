@@ -5,16 +5,13 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
-use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
 
 use crate::field::Field;
 use crate::style::FormStyle;
-use crate::validation::ValidationError;
 
 /// A checkbox field.
 pub struct Checkbox {
-    id: String,
     label: String,
     checked: bool,
     required: bool,
@@ -22,9 +19,8 @@ pub struct Checkbox {
 
 impl Checkbox {
     /// Creates a new checkbox field.
-    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+    pub fn new(label: impl Into<String>) -> Self {
         Self {
-            id: id.into(),
             label: label.into(),
             checked: false,
             required: false,
@@ -49,12 +45,20 @@ impl Checkbox {
 }
 
 impl Field for Checkbox {
-    fn id(&self) -> &str {
-        &self.id
-    }
-
     fn label(&self) -> &str {
         &self.label
+    }
+
+    fn value_str(&self) -> String {
+        if self.checked {
+            "true".to_string()
+        } else {
+            "false".to_string()
+        }
+    }
+
+    fn value_bool(&self) -> Option<bool> {
+        Some(self.checked)
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer, focused: bool, style: &FormStyle) {
@@ -112,23 +116,12 @@ impl Field for Checkbox {
         }
     }
 
-    fn value(&self) -> Value {
-        Value::Bool(self.checked)
-    }
-
-    fn validate(&self) -> Result<(), Vec<ValidationError>> {
+    fn validate(&self) -> Result<(), Vec<String>> {
         if self.required && !self.checked {
-            Err(vec![ValidationError {
-                field_id: self.id.clone(),
-                message: format!("{} must be checked", self.label),
-            }])
+            Err(vec![format!("{} must be checked", self.label)])
         } else {
             Ok(())
         }
-    }
-
-    fn height(&self) -> u16 {
-        1
     }
 
     fn is_required(&self) -> bool {

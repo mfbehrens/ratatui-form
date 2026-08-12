@@ -1,18 +1,12 @@
-//! Form and FormBuilder implementation.
-
-use std::fs::File;
-use std::io::{self, Write};
-use std::path::Path;
+//! Form rendering and interaction engine.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Padding, Widget};
-use serde_json::{Map, Value};
 
-use crate::block::Block as FormBlock;
-use crate::field::{Checkbox, Field, Select, TextInput};
+use crate::field::Field;
 use crate::navigation::FocusManager;
 use crate::style::FormStyle;
 use crate::validation::ValidationError;
@@ -28,9 +22,13 @@ pub enum FormResult {
     Active,
 }
 
-/// A form with fields and navigation.
+/// A form holding an index-addressed list of fields.
+///
+/// Fields are stored in a plain list; the index in that list is the field's
+/// id. Construct a form through [`TypedForm`](crate::TypedForm), usually via
+/// `#[derive(FormModel)]`.
 pub struct Form {
-    title: Option<String>,
+    title: String,
     fields: Vec<Box<dyn Field>>,
     focus_manager: FocusManager,
     style: FormStyle,
@@ -39,9 +37,42 @@ pub struct Form {
 }
 
 impl Form {
-    /// Creates a new form builder.
-    pub fn builder() -> FormBuilder {
-        FormBuilder::new()
+    /// Creates a new, empty form with the given title.
+    pub fn new(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            fields: Vec::new(),
+            focus_manager: FocusManager::new(0),
+            style: FormStyle::default(),
+            result: FormResult::Active,
+            validation_errors: Vec::new(),
+        }
+    }
+
+    /// Sets the form style.
+    pub fn set_style(&mut self, style: FormStyle) {
+        self.style = style;
+    }
+
+    /// Appends a field to the form.
+    pub fn push(&mut self, field: Box<dyn Field>) {
+        self.fields.push(field);
+        self.focus_manager.set_field_count(self.fields.len());
+    }
+
+    /// Returns the number of fields in the form.
+    pub fn field_count(&self) -> usize {
+        self.fields.len()
+    }
+
+    /// Returns the raw string value of the field at `index`, if any.
+    pub fn value_str(&self, index: usize) -> Option<String> {
+        self.fields.get(index).map(|field| field.value_str())
+    }
+
+    /// Returns the boolean value of the field at `index`, if it is one.
+    pub fn value_bool(&self, index: usize) -> Option<bool> {
+        self.fields.get(index).and_then(|field| field.value_bool())
     }
 
     /// Returns the current form result.
@@ -52,6 +83,11 @@ impl Form {
     /// Returns whether the form is still active.
     pub fn is_active(&self) -> bool {
         self.result == FormResult::Active
+    }
+
+    /// Returns validation errors from the last submit attempt.
+    pub fn validation_errors(&self) -> &[ValidationError] {
+        &self.validation_errors
     }
 
     /// Handles keyboard input.
@@ -110,9 +146,13 @@ impl Form {
     fn try_submit(&mut self) {
         self.validation_errors.clear();
 
-        for field in &self.fields {
-            if let Err(errors) = field.validate() {
-                self.validation_errors.extend(errors);
+        for (index, field) in self.fields.iter().enumerate() {
+            if let Err(messages) = field.validate() {
+                self.validation_errors
+                    .extend(messages.into_iter().map(|message| ValidationError {
+                        field_index: index,
+                        message,
+                    }));
             }
         }
 
@@ -121,39 +161,9 @@ impl Form {
         } else {
             // Focus on the first field with an error
             if let Some(error) = self.validation_errors.first() {
-                for (i, field) in self.fields.iter().enumerate() {
-                    if field.id() == error.field_id {
-                        self.focus_manager.focus_field(i);
-                        break;
-                    }
-                }
+                self.focus_manager.focus_field(error.field_index);
             }
         }
-    }
-
-    /// Returns the form data as a JSON object.
-    pub fn to_json(&self) -> Value {
-        let mut map = Map::new();
-
-        for field in &self.fields {
-            map.insert(field.id().to_string(), field.value());
-        }
-
-        Value::Object(map)
-    }
-
-    /// Writes the form data to a JSON file.
-    pub fn write_json(&self, path: impl AsRef<Path>) -> io::Result<()> {
-        let json = self.to_json();
-        let mut file = File::create(path)?;
-        let formatted = serde_json::to_string_pretty(&json)?;
-        file.write_all(formatted.as_bytes())?;
-        Ok(())
-    }
-
-    /// Returns validation errors.
-    pub fn validation_errors(&self) -> &[ValidationError] {
-        &self.validation_errors
     }
 
     /// Renders the form to a buffer.
@@ -165,14 +175,11 @@ impl Form {
             self.style.border_focused
         };
 
-        let mut block = Block::default()
+        let block = Block::default()
             .borders(Borders::ALL)
             .border_style(border_style)
-            .padding(Padding::horizontal(1));
-
-        if let Some(ref title) = self.title {
-            block = block.title(Span::styled(title, self.style.title));
-        }
+            .padding(Padding::horizontal(1))
+            .title(Span::styled(&self.title, self.style.title));
 
         let inner_area = block.inner(area);
         block.render(area, buf);
@@ -252,206 +259,5 @@ impl Form {
                 buf[(x + i as u16, area.y)].set_style(style);
             }
         }
-    }
-}
-
-/// Builder for creating forms.
-pub struct FormBuilder {
-    title: Option<String>,
-    fields: Vec<Box<dyn Field>>,
-    style: FormStyle,
-}
-
-impl FormBuilder {
-    /// Creates a new form builder.
-    pub fn new() -> Self {
-        Self {
-            title: None,
-            fields: Vec::new(),
-            style: FormStyle::default(),
-        }
-    }
-
-    /// Sets the form title.
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.title = Some(title.into());
-        self
-    }
-
-    /// Sets the form style.
-    pub fn style(mut self, style: FormStyle) -> Self {
-        self.style = style;
-        self
-    }
-
-    /// Starts building a text field.
-    pub fn text(self, id: impl Into<String>, label: impl Into<String>) -> TextFieldBuilder {
-        TextFieldBuilder::new(self, id.into(), label.into())
-    }
-
-    /// Starts building a select field.
-    pub fn select(self, id: impl Into<String>, label: impl Into<String>) -> SelectFieldBuilder {
-        SelectFieldBuilder::new(self, id.into(), label.into())
-    }
-
-    /// Starts building a checkbox field.
-    pub fn checkbox(self, id: impl Into<String>, label: impl Into<String>) -> CheckboxFieldBuilder {
-        CheckboxFieldBuilder::new(self, id.into(), label.into())
-    }
-
-    /// Adds a pre-built field.
-    pub fn field(mut self, field: Box<dyn Field>) -> Self {
-        self.fields.push(field);
-        self
-    }
-
-    /// Adds all fields from a block.
-    pub fn block(mut self, block: impl FormBlock) -> Self {
-        for field in block.fields() {
-            self.fields.push(field);
-        }
-        self
-    }
-
-    /// Builds the form.
-    pub fn build(self) -> Form {
-        let field_count = self.fields.len();
-        Form {
-            title: self.title,
-            fields: self.fields,
-            focus_manager: FocusManager::new(field_count),
-            style: self.style,
-            result: FormResult::Active,
-            validation_errors: Vec::new(),
-        }
-    }
-}
-
-impl Default for FormBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Builder for text fields.
-pub struct TextFieldBuilder {
-    form_builder: FormBuilder,
-    field: TextInput,
-}
-
-impl TextFieldBuilder {
-    fn new(form_builder: FormBuilder, id: String, label: String) -> Self {
-        Self {
-            form_builder,
-            field: TextInput::new(id, label),
-        }
-    }
-
-    /// Sets a placeholder.
-    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.field = self.field.placeholder(placeholder);
-        self
-    }
-
-    /// Marks the field as required.
-    pub fn required(mut self) -> Self {
-        self.field = self.field.required();
-        self
-    }
-
-    /// Sets the initial value.
-    pub fn initial_value(mut self, value: impl Into<String>) -> Self {
-        self.field = self.field.initial_value(value);
-        self
-    }
-
-    /// Adds a validator.
-    pub fn validator(mut self, validator: Box<dyn crate::validation::Validator>) -> Self {
-        self.field = self.field.validator(validator);
-        self
-    }
-
-    /// Finishes building this field and returns to the form builder.
-    pub fn done(mut self) -> FormBuilder {
-        self.form_builder.fields.push(Box::new(self.field));
-        self.form_builder
-    }
-}
-
-/// Builder for select fields.
-pub struct SelectFieldBuilder {
-    form_builder: FormBuilder,
-    field: Select,
-}
-
-impl SelectFieldBuilder {
-    fn new(form_builder: FormBuilder, id: String, label: String) -> Self {
-        Self {
-            form_builder,
-            field: Select::new(id, label),
-        }
-    }
-
-    /// Adds an option.
-    pub fn option(mut self, value: impl Into<String>, display: impl Into<String>) -> Self {
-        self.field = self.field.option(value, display);
-        self
-    }
-
-    /// Adds multiple options.
-    pub fn options(mut self, options: Vec<(impl Into<String>, impl Into<String>)>) -> Self {
-        self.field = self.field.options(options);
-        self
-    }
-
-    /// Marks the field as required.
-    pub fn required(mut self) -> Self {
-        self.field = self.field.required();
-        self
-    }
-
-    /// Sets the initial value.
-    pub fn initial_value(mut self, value: &str) -> Self {
-        self.field = self.field.initial_value(value);
-        self
-    }
-
-    /// Finishes building this field and returns to the form builder.
-    pub fn done(mut self) -> FormBuilder {
-        self.form_builder.fields.push(Box::new(self.field));
-        self.form_builder
-    }
-}
-
-/// Builder for checkbox fields.
-pub struct CheckboxFieldBuilder {
-    form_builder: FormBuilder,
-    field: Checkbox,
-}
-
-impl CheckboxFieldBuilder {
-    fn new(form_builder: FormBuilder, id: String, label: String) -> Self {
-        Self {
-            form_builder,
-            field: Checkbox::new(id, label),
-        }
-    }
-
-    /// Sets the initial checked state.
-    pub fn checked(mut self, checked: bool) -> Self {
-        self.field = self.field.checked(checked);
-        self
-    }
-
-    /// Marks the field as required (must be checked).
-    pub fn required(mut self) -> Self {
-        self.field = self.field.required();
-        self
-    }
-
-    /// Finishes building this field and returns to the form builder.
-    pub fn done(mut self) -> FormBuilder {
-        self.form_builder.fields.push(Box::new(self.field));
-        self.form_builder
     }
 }

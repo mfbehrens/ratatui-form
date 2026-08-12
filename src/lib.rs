@@ -1,95 +1,69 @@
 //! # ratatui-form
 //!
-//! A fluent TUI form builder built on [Ratatui]. Compose forms from pre-built
-//! field types and composite blocks, wire in validators, theme with presets or
-//! custom styles, and export results as JSON.
+//! Typed TUI forms built on [Ratatui]. Define a struct, derive
+//! [`FormModel`], and get an interactive form whose edited values convert
+//! back into the struct.
 //!
 //! [Ratatui]: https://github.com/ratatui/ratatui
 //!
 //! ## Features
 //!
-//! - **Builder API** — chain `.text()`, `.select()`, `.checkbox()`, `.block()` to assemble a form.
+//! - **Typed forms** — `#[derive(FormModel)]` maps a struct to a form and back.
 //! - **Fields** — [`TextInput`], [`Select`] (dropdown), [`Checkbox`].
-//! - **Blocks** — [`AddressBlock`], [`ContactBlock`], [`DateRangeBlock`] bundle related fields.
-//! - **Validation** — [`Required`], [`Email`], [`MinLength`], [`MaxLength`], [`Pattern`], or your own [`Validator`].
-//! - **Theming** — [`FormStyle::dark`] / [`FormStyle::light`] presets, or override any component style.
-//! - **Output** — [`Form::to_json`] / [`Form::write_json`] for flat JSON export.
+//! - **Validation** — [`Required`], [`Email`], [`MinLength`], [`MaxLength`],
+//!   [`Pattern`], [`Numeric`], or any `fn(&str) -> bool` / custom [`Validator`].
+//! - **Theming** — [`FormStyle::dark`] / [`FormStyle::light`] presets, or
+//!   override any component style.
 //!
-//! ## Building a form
+//! ## Quick start
 //!
 //! ```no_run
-//! use ratatui_form::{Form, AddressBlock, Email};
+//! use ratatui_form::{FormModel, TypedForm};
 //!
-//! let form = Form::builder()
-//!     .title("Shipping Info")
-//!     .text("name", "Full Name").required().done()
-//!     .text("email", "Email")
-//!         .required()
-//!         .validator(Box::new(Email))
-//!         .done()
-//!     .block(AddressBlock::new("shipping").required())
-//!     .checkbox("newsletter", "Subscribe to newsletter").done()
-//!     .build();
+//! #[derive(FormModel)]
+//! #[form(title = "Sign Up")]
+//! struct Signup {
+//!     #[form(label = "Full Name", required, placeholder = "Ada Lovelace")]
+//!     name: String,
+//!
+//!     #[form(label = "Age")]
+//!     age: u8,
+//!
+//!     #[form(label = "Subscribe")]
+//!     newsletter: bool,
+//!
+//!     #[form(skip)]
+//!     id: u64,
+//! }
+//!
+//! let model = Signup { name: "Ada".into(), age: 37, newsletter: true, id: 1 };
+//! let form: TypedForm<Signup> = model.into();
+//! let back: Signup = Signup::try_from(form).unwrap();
+//! # let _ = back;
 //! ```
 //!
-//! See `examples/address_form.rs` for a complete event-loop wiring with
+//! See `examples/derive_form.rs` for the full event-loop wiring with
 //! `crossterm` + `ratatui::Terminal`.
 //!
-//! ## Fields
+//! ## Field attributes
 //!
-//! ```no_run
-//! # use ratatui_form::{Form, MinLength};
-//! // TextInput
-//! Form::builder()
-//!     .text("username", "Username")
-//!         .placeholder("your-handle")
-//!         .required()
-//!         .validator(Box::new(MinLength(3)))
-//!         .done()
-//!     .build();
-//! ```
+//! Each field of the struct becomes a form field, addressed by its position
+//! in the struct:
 //!
-//! ```no_run
-//! # use ratatui_form::Form;
-//! // Select (dropdown)
-//! Form::builder()
-//!     .select("priority", "Priority")
-//!         .option("low", "Low")
-//!         .option("medium", "Medium")
-//!         .option("high", "High")
-//!         .initial_value("medium")
-//!         .required()
-//!         .done()
-//!     .build();
-//! ```
+//! - `#[form(label = "…")]` — display label (defaults to the humanized name)
+//! - `#[form(placeholder = "…")]` — text input placeholder
+//! - `#[form(required)]` — the field must have a value to submit
+//! - `#[form(validate = path)]` — a `fn(&str) -> bool` validator (repeatable)
+//! - `#[form(skip)]` — exclude the field; restored via `Default`
 //!
-//! ```no_run
-//! # use ratatui_form::Form;
-//! // Checkbox
-//! Form::builder()
-//!     .checkbox("terms", "I agree to the terms")
-//!         .required()
-//!         .done()
-//!     .build();
-//! ```
-//!
-//! ## Blocks
-//!
-//! Blocks expand into several related fields with sensible validators:
-//!
-//! ```no_run
-//! use ratatui_form::{Form, AddressBlock, ContactBlock, DateRangeBlock};
-//!
-//! Form::builder()
-//!     .block(ContactBlock::new("contact").required())      // _name, _email, _phone
-//!     .block(AddressBlock::new("shipping").required())     // _street1.._zip
-//!     .block(DateRangeBlock::new("trip").required())       // _start, _end (YYYY-MM-DD)
-//!     .build();
-//! ```
+//! Supported field types: `String`, `Option<String>`, `bool`, `std::net::Ipv4Addr`,
+//! and the numeric types (`u8`..`u64`, `i8`..`i64`, `f32`, `f64`, and their size
+//! variants). IPv4 fields are required and validated.
 //!
 //! ## Validation
 //!
-//! Built-in validators live at the crate root. Implement [`Validator`] for custom rules:
+//! Built-in validators live at the crate root. Implement [`Validator`] for custom
+//! rules, or pass a plain `fn(&str) -> bool`:
 //!
 //! ```
 //! use ratatui_form::Validator;
@@ -109,36 +83,35 @@
 //! ## Theming
 //!
 //! ```no_run
-//! use ratatui_form::{Form, FormStyle};
+//! use ratatui_form::{FormModel, FormStyle, TypedForm};
 //! use ratatui::style::{Color, Modifier, Style};
 //!
-//! // Presets
-//! Form::builder().style(FormStyle::light()).build();
+//! #[derive(FormModel)]
+//! struct Settings {
+//!     username: String,
+//! }
 //!
-//! // Custom
 //! let style = FormStyle::new()
 //!     .title(Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
-//!     .input_focused(Style::default().fg(Color::White).bg(Color::Blue))
-//!     .button_focused(Style::default().fg(Color::Black).bg(Color::Green));
-//! Form::builder().style(style).build();
+//!     .input_focused(Style::default().fg(Color::White).bg(Color::Blue));
+//!
+//! let model = Settings { username: "ada".into() };
+//! let form: TypedForm<Settings> = model.get_form().with_style(style);
+//! # let _ = form;
 //! ```
-//!
-//! ## JSON output
-//!
-//! [`Form::to_json`] returns a flat `serde_json::Value` keyed by field id;
-//! [`Form::write_json`] writes the pretty-printed JSON to disk.
 
-pub mod block;
 pub mod field;
 pub mod form;
+pub mod model;
 pub mod navigation;
 pub mod style;
 pub mod validation;
 
-pub use block::{AddressBlock, Block, ContactBlock, DateRangeBlock};
 pub use field::{Checkbox, Field, Select, TextInput};
-pub use form::{Form, FormBuilder, FormResult};
+pub use form::FormResult;
+pub use model::{Form, FormExtractError, FormModel};
 pub use navigation::FocusManager;
+pub use ratatui_form_derive::FormModel;
 pub use style::FormStyle;
-pub use validation::rules::{Email, MaxLength, MinLength, Pattern, Required};
+pub use validation::rules::{Email, Ipv4, MaxLength, MinLength, Numeric, Pattern, Required};
 pub use validation::{ValidationError, Validator};
