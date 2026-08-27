@@ -1,0 +1,17 @@
+[package]
+name = "ratatui-form"
+version = "0.1.1"
+edition = "2021"
+license = "MIT"
+description = "Typed TUI forms for Ratatui, generated from structs with #[derive(FormModel)]"
+repository = "https://github.com/DavidLiedle/ratatui-form"
+documentation = "https://docs.rs/ratatui-form"
+keywords = ["tui", "terminal", "form", "ratatui", "cli"]
+categories = ["command-line-interface"]
+
+[dependencies]
+ratatui = "0.30.2"
+crossterm = "0.29"
+unicode-width = "0.2"
+regex = "1.10"
+ratatui-form-derive = { version = "0.1", path = "../ratatui-form-derive" }
